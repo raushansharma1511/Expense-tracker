@@ -4,5 +4,7 @@ from .views import TransactionListCreateView, TransactionDetailView, MonthlySumm
 urlpatterns = [
     path("", TransactionListCreateView.as_view(), name="transaction-list-create"),
     path("<uuid:pk>/", TransactionDetailView.as_view(), name="transaction-detail"),
-    path("monthly-summary/", MonthlySummaryView.as_view(), name="monthly-summary"),
+    path(
+        "monthly-report/", MonthlySummaryView.as_view(), name="monthly-summary-report"
+    ),
 ]

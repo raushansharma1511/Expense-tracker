@@ -45,6 +45,7 @@ class CategoriesView(APIView):
 
         return Response(
             {
+                "status": "success",
                 "message": "Categories retrieved successfully.",
                 "data": response_data,
             },
@@ -53,17 +54,31 @@ class CategoriesView(APIView):
 
     def post(self, request):
         """
-        Add user sepecific category
+        Add user specific category
         """
         serializer = CategorySerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             if request.user.is_staff:
-                # is user is staff user then catagory is predefined
+                # is user is staff user then category is predefined
                 serializer.save(user=request.user, is_predefined=True)
             else:
                 serializer.save(user=request.user)  # Associate category with the user
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Category created successfully.",
+                    "data": serializer.data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(
+            {
+                "status": "error",
+                "message": "Category creation failed.",
+                "errors": serializer.errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class CategoriesDetailView(APIView):
@@ -98,10 +113,20 @@ class CategoriesDetailView(APIView):
                 or request.user.is_staff
             ):
                 serializer = CategorySerializer(category)
-                return Response(serializer.data, status=status.HTTP_200_OK)
+                return Response(
+                    {
+                        "status": "success",
+                        "message": "Category retrieved successfully.",
+                        "data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
             return Response(
-                {"error": "Access denied to this category."},
+                {
+                    "status": "error",
+                    "message": "Access denied to this category.",
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -124,11 +149,28 @@ class CategoriesDetailView(APIView):
 
             if serializer.is_valid():
                 serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {
+                        "status": "success",
+                        "message": "Category updated successfully.",
+                        "data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Category updatation failed",
+                    "error": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         return Response(
-            {"error": "Category not found or access denied."},
+            {
+                "status": "error",
+                "message": "Category not found or access denied.",
+            },
             status=status.HTTP_404_NOT_FOUND,
         )
 
@@ -141,10 +183,16 @@ class CategoriesDetailView(APIView):
             category.is_deleted = True  # Perform a soft delete
             category.save()  # Save the updated category object
             return Response(
-                {"message": "Category deleted successfully."},
+                {
+                    "status": "success",
+                    "message": "Category deleted successfully.",
+                },
                 status=status.HTTP_204_NO_CONTENT,
             )
         return Response(
-            {"error": "Category not found or access denied."},
+            {
+                "status": "error",
+                "message": "Category not found or access denied.",
+            },
             status=status.HTTP_404_NOT_FOUND,
         )

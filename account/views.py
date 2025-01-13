@@ -13,7 +13,7 @@ from .models import User
 from django.contrib.auth.hashers import make_password
 
 
-class UserRegistrationView(APIView):
+class RegisterView(APIView):
     """view for user Registration"""
 
     def post(self, request):
@@ -23,10 +23,21 @@ class UserRegistrationView(APIView):
 
             user = serializer.save()
             return Response(
-                {"message": "User created successfully!", "user": serializer.data},
+                {
+                    "status": "success",
+                    "message": "User created successfully!",
+                    "user": serializer.data,
+                },
                 status=status.HTTP_201_CREATED,
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "status": "error",
+                "message": "Validation error occurs",
+                "error": serializer.errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class LoginView(APIView):
@@ -45,13 +56,21 @@ class LoginView(APIView):
             ActiveAccessToken.objects.create(access_token=str(access_token), user=user)
             return Response(
                 {
-                    "message": "login successfull",
+                    "status": "success",
+                    "message": "login successful",
                     "access_token": str(access_token),
                     "refresh_token": str(refresh),
                 },
                 status=200,
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "status": "error",
+                "message": "Invalid login credentials.",
+                "errors": serializer.errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class LogoutView(APIView):
@@ -65,7 +84,10 @@ class LogoutView(APIView):
 
         if not refresh_token:
             return Response(
-                {"error": "Refresh token is required."},
+                {
+                    "status": "error",
+                    "message": "Refresh token is required.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -90,13 +112,19 @@ class LogoutView(APIView):
             token.blacklist()
 
             return Response(
-                {"message": "Successfully logged out."},
+                {
+                    "status": "success",
+                    "message": "Successfully logged out.",
+                },
                 status=status.HTTP_200_OK,
             )
         except Exception as e:
 
             return Response(
-                {"error": "Invalid refresh token or already blacklisted."},
+                {
+                    "status": "error",
+                    "message": "Invalid refresh token or already blacklisted.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -113,13 +141,14 @@ class UpdatePasswordView(APIView):
 
         if not user.check_password(old_password):
             return Response(
-                {"error": "please provide the valid old password"},
+                {"status": "error", "message": "please provide the valid old password"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if old_password == new_password:
             return Response(
                 {
-                    "error": "old and new password is same provide different new password that old one."
+                    "status": "success",
+                    "message": "old and new password is same provide different new password that old one.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -128,7 +157,7 @@ class UpdatePasswordView(APIView):
         user.save()
 
         return Response(
-            {"message": "password updated successfully"},
+            {"status": "success", "message": "password updated successfully"},
             status=status.HTTP_200_OK,
         )
 
@@ -139,21 +168,26 @@ class UserDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Retrieve the account details of the current logined user"""
+        """Retrieve the account details of the current logged in user"""
         user = request.user  # Get the authenticated user
         serializer = UserSerializer(user)
         return Response(
-            {"user": serializer.data},
+            {
+                "status": "success",
+                "message": "User details retrieved successfully.",
+                "user": serializer.data,
+            },
             status=status.HTTP_200_OK,
         )
 
     def patch(self, request):
-        """Update the account details of the current logined user"""
+        """Update the account details of the current logged in user"""
 
         if request.data.get("password"):
             return Response(
                 {
-                    "error": "password can't be updated in this request so don't provide password."
+                    "status": "error",
+                    "message": "password can't be updated in this request so don't provide password.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -161,7 +195,8 @@ class UserDetailView(APIView):
         if request.data.get("is_staff"):
             return Response(
                 {
-                    "error": "You cannot change the staff status of your account by itself."
+                    "status": "error",
+                    "message": "You cannot change the staff status of your account by itself.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -172,10 +207,21 @@ class UserDetailView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response(
-                {"message": "Profile updated successfully.", "user": serializer.data},
+                {
+                    "status": "success",
+                    "message": "Profile updated successfully.",
+                    "user": serializer.data,
+                },
                 status=status.HTTP_200_OK,
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "status": "error",
+                "message": "validation error occurs",
+                "error": serializer.errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 class DeleteUserView(APIView):
@@ -184,15 +230,11 @@ class DeleteUserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
-        """Deactivate the account of the current logined user"""
+        """Deactivate the account of the current logged in user"""
         user = request.user
 
         user.is_active = False  # soft delete
         user.save()
-
-        if user.is_staff:
-            # Set user field to None for categories created by this staff member
-            user.categories.update(user=None)
 
         # also logout its active session by deleting all its active token stored in db
         active_tokens = ActiveAccessToken.objects.filter(user=request.user)
@@ -200,6 +242,9 @@ class DeleteUserView(APIView):
             token.delete()
 
         return Response(
-            {"message": f"User '{user.username}' has been deactivated."},
+            {
+                "status": "success",
+                "message": f"User '{user.username}' has been deactivated.",
+            },
             status=status.HTTP_200_OK,
         )

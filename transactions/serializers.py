@@ -34,17 +34,5 @@ class TransactionSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
-
-        request = self.context.get("request")
-
-        if request and request.method == "PUT":
-            # Define the required fields for a full update
-            required_fields = {"type", "amount", "date"}
-            missing_fields = required_fields - set(validated_data.keys())
-
-            if missing_fields:
-                raise serializers.ValidationError(
-                    f"Missing fields for full update: {', '.join(missing_fields)}"
-                )
-
+        # update transaction with validated data
         return super().update(instance, validated_data)

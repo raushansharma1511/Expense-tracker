@@ -26,18 +26,24 @@ class TransactionListCreateView(APIView):
         paginator.page_size = 10  # Override the default page size
 
         if request.user.is_staff:
-            transactions = Transaction.objects.all()
+            transactions = Transaction.objects.all().order_by("-date")
         else:
             transactions = Transaction.objects.filter(
                 user=request.user, is_deleted=False
-            )
+            ).order_by("-date")
 
         # Paginate the queryset
         paginated_transactions = paginator.paginate_queryset(transactions, request)
         serializer = TransactionSerializer(paginated_transactions, many=True)
 
         # Return paginated response
-        return paginator.get_paginated_response(serializer.data)
+        return paginator.get_paginated_response(
+            {
+                "status": "success",
+                "message": "Transactions retrieved successfully.",
+                "data": serializer.data,
+            }
+        )
 
     # Create a new transaction
     def post(self, request):
@@ -50,10 +56,18 @@ class TransactionListCreateView(APIView):
 
         if serializer.is_valid():
             serializer.save(user=request.user)  # Automatically set the user
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Transaction created successfully",
+                    "data": serializer.data,
+                },
+                status=status.HTTP_201_CREATED,
+            )
 
         return Response(
             {
+                "status": "error",
                 "messege": "Invalid data provided",
                 "error": serializer.errors,
             },
@@ -87,9 +101,18 @@ class TransactionDetailView(APIView):
         transaction = self.get_object(pk, request)
         if transaction:
             serializer = TransactionSerializer(transaction)
-            return Response(serializer.data)
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Transaction retrieved successfully.",
+                    "data": serializer.data,
+                }
+            )
         return Response(
-            {"error": "Transaction not found or access denied."},
+            {
+                "status": "error",
+                "message": "Transaction not found or access denied.",
+            },
             status=status.HTTP_404_NOT_FOUND,
         )
 
@@ -107,11 +130,28 @@ class TransactionDetailView(APIView):
             )
             if serializer.is_valid():
                 serializer.save()
-                return Response(serializer.data)
+                return Response(
+                    {
+                        "status": "success",
+                        "message": "Transaction updated successfully.",
+                        "data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Transaction update failed.",
+                    "errors": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(
-            {"error": "Transaction not found or access denied."},
+            {
+                "status": "error",
+                "message": "Transaction not found or access denied.",
+            },
             status=status.HTTP_404_NOT_FOUND,
         )
 
@@ -128,27 +168,51 @@ class TransactionDetailView(APIView):
             )
             if serializer.is_valid():
                 serializer.save()
-                return Response(serializer.data)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {
+                        "status": "success",
+                        "message": "Transaction partially updated successfully.",
+                        "data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {
+                    "status": "error",
+                    "message": "Transaction update failed.",
+                    "errors": serializer.errors,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(
-            {"error": "Transaction not found or access denied."},
+            {
+                "status": "error",
+                "message": "Transaction not found or access denied.",
+            },
             status=status.HTTP_404_NOT_FOUND,
         )
 
     def delete(self, request, pk):
         """
-        Delete a specific transction by id
+        Delete a specific transaction by id
         """
         transaction = self.get_object(pk, request)
         if transaction:
             transaction.is_deleted = True
             transaction.save()
             return Response(
-                {"messege": "Transaction deleted successfully"},
+                {
+                    "status": "success",
+                    "message": "Transaction deleted successfully",
+                },
                 status=status.HTTP_204_NO_CONTENT,
             )
         return Response(
-            {"error": "Transaction not found or access denied."},
+            {
+                "status": "error",
+                "message": "Transaction not found or access denied.",
+            },
             status=status.HTTP_404_NOT_FOUND,
         )
 
@@ -193,4 +257,11 @@ class MonthlySummaryView(APIView):
             "balance": balance,
         }
 
-        return Response(summary)
+        return Response(
+            {
+                "status": "success",
+                "message": "Monthly summary retrieved successfully.",
+                "data": summary,
+            },
+            status=status.HTTP_200_OK,
+        )
