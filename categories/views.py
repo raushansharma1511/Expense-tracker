@@ -1,198 +1,98 @@
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from rest_framework import status
-from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+from django.db.models import Q
+from django.db import transaction
 
 from .serializers import CategorySerializer
 from .models import Category
+from transactions.models import Transaction
+
+from .permissions import CanManageCategories
+from common.utils import (
+    CustomPagination,
+    not_found_response,
+    validation_error_response,
+)
 
 
-class CategoriesView(APIView):
+class CategoryListCreateView(APIView, CustomPagination):
     """view to create and list categories"""
-
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         """
-        Retrieve predefined and user-specific categories.
+        Retrieve all categories with custom pagination.
         """
         if request.user.is_staff:
-            # if user is staff then show them all the available categories
-            categories = Category.objects.filter(is_deleted=False)
-            serializer = CategorySerializer(categories, many=True)
-
-            response_data = serializer.data
-
+            categories = Category.objects.all()
         else:
-            # Retrieve predefined categories
-            predefined_categories = Category.objects.filter(
-                is_predefined=True, is_deleted=False
+            categories = Category.objects.filter(is_deleted=False).filter(
+                Q(is_predefined=True) | Q(user=request.user)
             )
-            predefined_serializer = CategorySerializer(predefined_categories, many=True)
-
-            # Retrieve user-specific categories
-            user_categories = Category.objects.filter(
-                user=request.user, is_deleted=False
-            )
-            user_serializer = CategorySerializer(user_categories, many=True)
-
-            response_data = {
-                "predefined_categories": predefined_serializer.data,
-                "user_categories": user_serializer.data,
-            }
-
-        return Response(
-            {
-                "status": "success",
-                "message": "Categories retrieved successfully.",
-                "data": response_data,
-            },
-            status=status.HTTP_200_OK,
-        )
+        # Apply custom pagination
+        paginated_categories = self.paginate_queryset(categories, request)
+        serializer = CategorySerializer(paginated_categories, many=True)
+        return self.get_paginated_response(serializer.data)
 
     def post(self, request):
-        """
-        Add user specific category
-        """
+        """Add a new category."""
         serializer = CategorySerializer(data=request.data, context={"request": request})
+
         if serializer.is_valid():
-            if request.user.is_staff:
-                # is user is staff user then category is predefined
-                serializer.save(user=request.user, is_predefined=True)
-            else:
-                serializer.save(user=request.user)  # Associate category with the user
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Category created successfully.",
-                    "data": serializer.data,
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        return Response(
-            {
-                "status": "error",
-                "message": "Category creation failed.",
-                "errors": serializer.errors,
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return validation_error_response(serializer.errors)
 
 
-class CategoriesDetailView(APIView):
+class CategoryDetailView(APIView):
     """Api View to update, view and delete specific category"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [CanManageCategories]
 
-    def get_object(self, pk, request):
+    def get_object(self, id):
         """Method to get a specific category object by its id."""
-        try:
-            category = Category.objects.get(pk=pk, is_deleted=False)
-
-            # Check if the user is the owner or is a staff member
-            if category.user == request.user or request.user.is_staff:
-                return category
-            else:
-                # Return a proper response for permission denied
-                raise PermissionDenied("You don't have access to this category.")
-        except Category.DoesNotExist:
-            return None
+        return Category.objects.get(id=id)
 
     def get(self, request, pk):
-        """
-        Retrieve a specific category by its ID.
-        """
+        """Retrieve a specific category."""
         try:
-            category = Category.objects.get(id=pk, is_deleted=False)
+            category = self.get_object(id=pk)
+            self.check_object_permissions(request, category)
+        except Exception as e:
+            return not_found_response("Category not found")
+        
+        serializer = CategorySerializer(category)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
-            if (
-                category.user == request.user
-                or category.is_predefined
-                or request.user.is_staff
-            ):
-                serializer = CategorySerializer(category)
-                return Response(
-                    {
-                        "status": "success",
-                        "message": "Category retrieved successfully.",
-                        "data": serializer.data,
-                    },
-                    status=status.HTTP_200_OK,
-                )
+    def patch(self, request, pk):
+        """Update a specific category."""
+        try:
+            category = self.get_object(pk)
+            self.check_object_permissions(request, category)
+        except Exception as e:
+            return not_found_response("Category not found")
 
-            return Response(
-                {
-                    "status": "error",
-                    "message": "Access denied to this category.",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        except Category.DoesNotExist:
-            return Response(
-                {"error": "Category not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-    def put(self, request, pk):
-        """
-        Fully update a specific category. Requires all parameters to be passed in the request.
-        """
-        category = self.get_object(pk, request)
-        if category:
-            # If the category is found and user has permission, update it
-            serializer = CategorySerializer(
-                category, data=request.data, context={"request": request}
-            )
-
-            if serializer.is_valid():
-                serializer.save()
-                return Response(
-                    {
-                        "status": "success",
-                        "message": "Category updated successfully.",
-                        "data": serializer.data,
-                    },
-                    status=status.HTTP_200_OK,
-                )
-            return Response(
-                {
-                    "status": "error",
-                    "message": "Category updatation failed",
-                    "error": serializer.errors,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        return Response(
-            {
-                "status": "error",
-                "message": "Category not found or access denied.",
-            },
-            status=status.HTTP_404_NOT_FOUND,
+        serializer = CategorySerializer(
+            category, data=request.data, context={"request": request}, partial=True
         )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return validation_error_response(serializer.errors)
 
     def delete(self, request, pk):
-        """
-        delete a specific category.
-        """
-        category = self.get_object(pk, request)
-        if category:
-            category.is_deleted = True  # Perform a soft delete
-            category.save()  # Save the updated category object
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Category deleted successfully.",
-                },
-                status=status.HTTP_204_NO_CONTENT,
-            )
-        return Response(
-            {
-                "status": "error",
-                "message": "Category not found or access denied.",
-            },
-            status=status.HTTP_404_NOT_FOUND,
-        )
+        """Soft delete a specific category."""
+        try:
+            category = self.get_object(pk)
+            self.check_object_permissions(request, category)
+        except Exception as e:
+            return not_found_response("Category not found")
+        
+        with transaction.atomic():  # Use atomic transaction to ensure data consistency
+            Transaction.objects.filter(category=category).update(category=None)
+
+        category.is_deleted = True
+        category.save()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
