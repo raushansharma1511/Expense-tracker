@@ -2,266 +2,147 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.exceptions import PermissionDenied
 
-from django.db.models import Sum
+from django.shortcuts import get_object_or_404
+from django.db import transaction as db_transaction
 from datetime import datetime, timedelta
 from .models import Transaction, Category
-from .serializers import TransactionSerializer
+from .serializers import TransactionSerializer, MonthlySummarySerializer
+from common.utils import (
+    CustomPagination,
+    validation_error_response,
+    not_found_response,
+)
+from common.permissions import IsStaffOrOwner
+from .tasks import track_and_notify_budget
 
 
 # View for listing and creating transactions
-class TransactionListCreateView(APIView):
+class TransactionListCreateView(APIView, CustomPagination):
     """Api view for listing all transactions and creating a new transaction"""
-
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         """
         Get method to list all transactions for a particular user and staff user can access all the transactions.
         """
-
-        paginator = PageNumberPagination()  # Instantiate the paginator
-        paginator.page_size = 10  # Override the default page size
-
         if request.user.is_staff:
-            transactions = Transaction.objects.all().order_by("-date")
+            queryset = Transaction.objects.all().order_by("-date_time")
         else:
-            transactions = Transaction.objects.filter(
+            queryset = Transaction.objects.filter(
                 user=request.user, is_deleted=False
-            ).order_by("-date")
+            ).order_by("-date_time")
 
-        # Paginate the queryset
-        paginated_transactions = paginator.paginate_queryset(transactions, request)
-        serializer = TransactionSerializer(paginated_transactions, many=True)
+        paginated_data = self.paginate_queryset(queryset, request)
+        serializer = TransactionSerializer(paginated_data, many=True)
+        return self.get_paginated_response(serializer.data)
 
-        # Return paginated response
-        return paginator.get_paginated_response(
-            {
-                "status": "success",
-                "message": "Transactions retrieved successfully.",
-                "data": serializer.data,
-            }
-        )
-
-    # Create a new transaction
     def post(self, request):
-        """
-        Post method to create a new transaction.
-        """
+        """Post method to create a new transaction."""
+
         serializer = TransactionSerializer(
             data=request.data, context={"request": request}
         )  # Pass request to context
 
         if serializer.is_valid():
-            serializer.save(user=request.user)  # Automatically set the user
+            transaction = serializer.save()
+            print(transaction)
+            track_and_notify_budget.delay(transaction.id)
             return Response(
-                {
-                    "status": "success",
-                    "message": "Transaction created successfully",
-                    "data": serializer.data,
-                },
+                serializer.data,
                 status=status.HTTP_201_CREATED,
             )
-
-        return Response(
-            {
-                "status": "error",
-                "messege": "Invalid data provided",
-                "error": serializer.errors,
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return validation_error_response(serializer.errors)
 
 
-# View for retrieving, updating, or deleting a specific transaction
 class TransactionDetailView(APIView):
     """Api view for retrieving, updating, deleting a specific transaction"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffOrOwner]
 
-    def get_object(self, pk, request):
+    def get_object(self, id):
         """Helper method to get the transaction object by primary key"""
+        return get_object_or_404(Transaction, id=id)
 
+    def get(self, request, id):
+        """Get method to retrieve a specific transaction by its id"""
         try:
-            transaction = Transaction.objects.get(pk=pk, is_deleted=False)
-            if transaction.user == request.user or request.user.is_staff:
-                return transaction
+            transaction = self.get_object(id)
+            self.check_object_permissions(request, transaction)
+        except Exception as e:
+            return not_found_response("Transaction not found.")
+
+        serializer = TransactionSerializer(transaction)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request, id):
+        """update a specific transaction."""
+        try:
+            transaction = self.get_object(id)
+            self.check_object_permissions(request, transaction)
+        except Exception as e:
+            return not_found_response("Transaction not found.")
+
+        serializer = TransactionSerializer(
+            transaction, data=request.data, partial=True, context={"request": request}
+        )
+        if serializer.is_valid():
+            transaction = serializer.save()
+            track_and_notify_budget.delay(transaction.id)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return validation_error_response(serializer.errors)
+
+    def delete(self, request, id):
+        """Delete a specific transaction by id"""
+        try:
+            transaction = self.get_object(id)
+            self.check_object_permissions(request, transaction)
+        except Exception as e:
+            return not_found_response("Transaction not found.")
+
+        wallet = transaction.wallet
+        with db_transaction.atomic():  # Ensure atomicity
+            if transaction.type == "debit":
+                wallet.balance += transaction.amount  # Revert deduction
             else:
-                raise PermissionDenied(
-                    "You do not have permission to access this transaction."
-                )
-        except Transaction.DoesNotExist:
-            return None
+                wallet.balance -= transaction.amount  # Revert addition
+                if wallet.balance < 0:
+                    wallet.balance = 0
 
-    def get(self, request, pk):
-        """Get method to retrieve a specfic transaction by its id"""
-
-        transaction = self.get_object(pk, request)
-        if transaction:
-            serializer = TransactionSerializer(transaction)
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Transaction retrieved successfully.",
-                    "data": serializer.data,
-                }
-            )
-        return Response(
-            {
-                "status": "error",
-                "message": "Transaction not found or access denied.",
-            },
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    def put(self, request, pk):
-        """
-        Fully update a specific transaction.
-        Requires all parameters to be passed in the request.
-        """
-        transaction = self.get_object(pk, request)
-        if transaction:
-            serializer = TransactionSerializer(
-                transaction,
-                data=request.data,
-                context={"request": request},
-            )
-            if serializer.is_valid():
-                serializer.save()
-                return Response(
-                    {
-                        "status": "success",
-                        "message": "Transaction updated successfully.",
-                        "data": serializer.data,
-                    },
-                    status=status.HTTP_200_OK,
-                )
-
-            return Response(
-                {
-                    "status": "error",
-                    "message": "Transaction update failed.",
-                    "errors": serializer.errors,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return Response(
-            {
-                "status": "error",
-                "message": "Transaction not found or access denied.",
-            },
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    def patch(self, request, pk):
-        """
-        Partially update a specific transaction.
-        Allows updating only specific fields.
-        """
-        print("called patch update")
-        transaction = self.get_object(pk, request)
-        if transaction:
-            serializer = TransactionSerializer(
-                transaction, data=request.data, partial=True
-            )
-            if serializer.is_valid():
-                serializer.save()
-                return Response(
-                    {
-                        "status": "success",
-                        "message": "Transaction partially updated successfully.",
-                        "data": serializer.data,
-                    },
-                    status=status.HTTP_200_OK,
-                )
-
-            return Response(
-                {
-                    "status": "error",
-                    "message": "Transaction update failed.",
-                    "errors": serializer.errors,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return Response(
-            {
-                "status": "error",
-                "message": "Transaction not found or access denied.",
-            },
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    def delete(self, request, pk):
-        """
-        Delete a specific transaction by id
-        """
-        transaction = self.get_object(pk, request)
-        if transaction:
+            wallet.save()
             transaction.is_deleted = True
             transaction.save()
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Transaction deleted successfully",
-                },
-                status=status.HTTP_204_NO_CONTENT,
-            )
-        return Response(
-            {
-                "status": "error",
-                "message": "Transaction not found or access denied.",
-            },
-            status=status.HTTP_404_NOT_FOUND,
-        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MonthlySummaryView(APIView):
     """
-    view for the showing the monthly summary report of income , expense and balance of user.
+    View for showing the monthly summary report of income, expense, and balance of a user,
+    including category-wise credit and debit.
     """
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Get the current month and year
         today = datetime.today()
         start_of_month = today.replace(day=1)
         end_of_month = (today.replace(day=28) + timedelta(days=4)).replace(
             day=1
         ) - timedelta(days=1)
 
-        # Filter transactions for the current user and the current month
+        # Filter transactions for the user and the current month
         transactions = Transaction.objects.filter(
             user=request.user,
             date__gte=start_of_month,
             date__lte=end_of_month,
             is_deleted=False,
         )
-
-        # Calculate total income, total expenses, and balance
-        total_income = (
-            transactions.filter(type="income").aggregate(Sum("amount"))["amount__sum"]
-            or 0
-        )
-        total_expense = (
-            transactions.filter(type="expense").aggregate(Sum("amount"))["amount__sum"]
-            or 0
-        )
-        balance = total_income - total_expense
-
-        summary = {
-            "total_income": total_income,
-            "total_expense": total_expense,
-            "balance": balance,
-        }
+        # Calculate summary using the serializer
+        summary_data = MonthlySummarySerializer.calculate_summary(transactions)
 
         return Response(
             {
-                "status": "success",
                 "message": "Monthly summary retrieved successfully.",
-                "data": summary,
+                "data": summary_data,
             },
             status=status.HTTP_200_OK,
         )

@@ -3,7 +3,7 @@ from .views import TransactionListCreateView, TransactionDetailView, MonthlySumm
 
 urlpatterns = [
     path("", TransactionListCreateView.as_view(), name="transaction-list-create"),
-    path("<uuid:pk>/", TransactionDetailView.as_view(), name="transaction-detail"),
+    path("<uuid:id>/", TransactionDetailView.as_view(), name="transaction-detail"),
     path(
         "monthly-report/", MonthlySummaryView.as_view(), name="monthly-summary-report"
     ),

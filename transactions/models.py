@@ -1,27 +1,30 @@
-# transactions/models.py
 from django.db import models
+from django.utils import timezone
 from account.models import User
 from categories.models import Category
+from wallets.models import Wallet
+from common.models import BaseModel
 import uuid
 
 
-# Transaction model to store income and expenses
-class Transaction(models.Model):
+class Transaction(BaseModel):
     TYPE_CHOICES = [
-        ("income", "Income"),
-        ("expense", "Expense"),
+        ("credit", "Credit"),  # credit, debit
+        ("debit", "Debit"),
     ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="transactions"
     )
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True)
-    type = models.CharField(max_length=10, choices=TYPE_CHOICES)
+    wallet = models.ForeignKey(
+        Wallet, on_delete=models.CASCADE, related_name="transactions"
+    )
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES, default="debit")
+    category = models.ForeignKey(
+        Category, on_delete=models.CASCADE, related_name="transactions"
+    )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    date = models.DateField()
+    date_time = models.DateTimeField(default=timezone.now)  # default to today's date
     description = models.TextField(blank=True)
-    is_deleted = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"{self.type.capitalize()} - {self.amount} ({self.category})"
+        return f"{self.user} - {self.type} - {self.amount}"
