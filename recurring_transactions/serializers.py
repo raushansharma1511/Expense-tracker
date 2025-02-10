@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.utils import timezone
 from django.db import transaction
 from decimal import Decimal
+import datetime
 
 from common.utils import is_valid_uuid
 from account.models import User
@@ -117,15 +118,10 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
 
     def validate_start_date(self, start_date):
         """Validate start date"""
-        if start_date < timezone.now():
+        today = datetime.date.today()
+        if start_date.date() < today:
             raise serializers.ValidationError("Start date cannot be in the past.")
         return start_date
-
-    def validate_end_date(self, end_date):
-        """Validate end date"""
-        if end_date and end_date < timezone.now():
-            raise serializers.ValidationError("End date must be in the future.")
-        return end_date
 
     def validate(self, attrs):
         """Cross-field validations"""
@@ -136,7 +132,7 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
             start_date = attrs.get(
                 "start_date", instance.start_date if instance else None
             )
-            if attrs["end_date"] <= start_date:
+            if attrs["end_date"].date() <= start_date.date():
                 raise serializers.ValidationError(
                     {"End_date": "End date must be after start date."}
                 )
@@ -155,4 +151,3 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
             # If start_date is updated, set next_run to new start_date
             validated_data["next_run"] = validated_data["start_date"]
         return super().update(instance, validated_data)
-

@@ -1,0 +1,48 @@
+# Python bytecode files
+*.pyc
+*.pyo
+__pycache__/
+
+# Virtual environment
+venv/
+.env
+*.env
+
+# Django specific
+*.log
+*.pot
+*.pyc
+local_settings.py
+db.sqlite3  # If using SQLite
+
+
+
+# Celery & Redis
+celerybeat-schedule
+dump.rdb
+
+# Media and static files (if applicable)
+media/
+staticfiles/
+node_modules/
+
+# VS Code settings
+.vscode/
+
+# IDE / Editor specific files
+*.swp
+*.swo
+*.swn
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+
+# Logs & Debug
+debug.log
+error.log
+coverage/
+*.cover
+nosetests.xml
+coverage.xml

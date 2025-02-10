@@ -17,10 +17,43 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
+from rest_framework import permissions
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+
+from reports.views import TransactionHistoryExportView
+
+
+schema_view = get_schema_view(
+    openapi.Info(
+        title="Expense Tracker API",
+        default_version="v1",
+        description="API documentation for my Django project",
+        terms_of_service="https://www.google.com/policies/terms/",
+        contact=openapi.Contact(email="raushan@gkmit.co"),
+        license=openapi.License(name="BSD License"),
+    ),
+    public=True,
+    permission_classes=(permissions.AllowAny,),
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path(
+        "swagger/", schema_view.with_ui("swagger", cache_timeout=0), name="swagger-docs"
+    ),
     path("api/", include("account.urls")),
     path("api/transactions/", include("transactions.urls")),
     path("api/categories/", include("categories.urls")),
+    path("api/wallets/", include("wallets.urls.wallet_url")),
+    path("api/budgets/", include("budgets.urls")),
+    path("api/interwallet-transactions/", include("wallets.urls.interwallet_url")),
+    path("api/recurring-transactions/", include("recurring_transactions.urls")),
+    path("api/transaction-report/", include("reports.urls")),
+    path(
+        "api/transaction-history-export/",
+        TransactionHistoryExportView.as_view(),
+        name="transaction-history-export",
+    ),
 ]
+

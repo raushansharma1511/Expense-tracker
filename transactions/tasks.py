@@ -25,6 +25,9 @@ def track_and_notify_budget(transaction_id):
             month=transaction.date_time.month,
             is_deleted=False,
         ).first()
+        
+        if not budget:
+            return
 
         # Calculate the total spending for the category and time period
         total_spent = Transaction.objects.filter(

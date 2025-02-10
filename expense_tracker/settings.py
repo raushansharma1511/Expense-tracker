@@ -11,6 +11,8 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+from dotenv import load_dotenv
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,13 +22,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
+# SECRET_KEY = os.getenv("SECRET_KEY")
 SECRET_KEY = "django-insecure-*xxwbytrx^9^4huch0k@m0ukczq@o6zm9d$7&l#qt*=+26xs#)"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG")
 
 ALLOWED_HOSTS = []
-
+# ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 # Application definition
 
@@ -40,9 +43,15 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "django_celery_beat",
+    'django_celery_results',
+    "drf_yasg",
     "account",
     "transactions",
     "categories",
+    "wallets",
+    "budgets",
+    "recurring_transactions",
 ]
 
 REST_FRAMEWORK = {
@@ -50,8 +59,11 @@ REST_FRAMEWORK = {
         "account.authentication.CustomJWTAuthentication",
         # "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
+    "EXCEPTION_HANDLER": "common.exceptions.custom_exception_handler",
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 1,
+
 }
 from datetime import timedelta
 
@@ -94,13 +106,13 @@ WSGI_APPLICATION = "expense_tracker.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
+# Database Configuration
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "Expense_tracker",
-        "USER": "mac",
-        "PASSWORD": "1234",
+        "NAME": os.getenv("DB_NAME"),
+        "USER": os.getenv("DB_USER"),
+        "PASSWORD": os.getenv("DB_PASSWORD"),
     }
 }
 
@@ -129,7 +141,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Kolkata"
 
 USE_I18N = True
 
@@ -147,3 +159,33 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "account.User"
+
+# CELERY
+# settings.py
+
+# Celery Configuration Options
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL")
+CELERY_ACCEPT_CONTENT = ["json"]  # Accept JSON formatted tasks
+CELERY_TASK_SERIALIZER = "json"  # Serialize tasks to JSON
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND")
+CELERY_TIMEZONE = os.getenv("CELERY_TIMEZONE")
+
+# CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "process-recurring-transactions": {
+        "task": "recurring_transactions.tasks.process_recurring_transactions",
+        "schedule": crontab(minute="*/5"),  # Run every 15 minutes
+    },
+}
+
+# sendingmail
+# settings.py for Mailgun
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = os.getenv("EMAIL_HOST")
+EMAIL_PORT = os.getenv("EMAIL_PORT")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")

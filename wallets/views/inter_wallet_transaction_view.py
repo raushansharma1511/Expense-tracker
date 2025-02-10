@@ -3,14 +3,16 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from ..models import InterWalletTransaction
-from ..serializers.inter_wallet_transaction_serializer import InterWalletTransactionSerializer
+from ..serializers.inter_wallet_transaction_serializer import (
+    InterWalletTransactionSerializer,
+)
 from common.permissions import IsStaffOrOwner
 from rest_framework.permissions import IsAuthenticated
 
 from common.utils import CustomPagination, validation_error_response, not_found_response
 
 
-class InterwalletTransactionListCreateView(APIView,CustomPagination):
+class InterwalletTransactionListCreateView(APIView, CustomPagination):
     """List all transactions or create a new one."""
 
     def get(self, request):
@@ -18,7 +20,9 @@ class InterwalletTransactionListCreateView(APIView,CustomPagination):
         if request.user.is_staff:
             transactions = InterWalletTransaction.objects.all()
         else:
-            transactions = InterWalletTransaction.objects.filter(user=request.user, is_deleted=False)
+            transactions = InterWalletTransaction.objects.filter(
+                user=request.user, is_deleted=False
+            )
 
         paginated_trasactions = self.paginate_queryset(transactions, request)
         serializer = InterWalletTransactionSerializer(paginated_trasactions, many=True)
@@ -26,7 +30,9 @@ class InterwalletTransactionListCreateView(APIView,CustomPagination):
 
     def post(self, request):
         """Create a new inter-wallet transaction."""
-        serializer = InterWalletTransactionSerializer(data=request.data, context={"request": request})
+        serializer = InterWalletTransactionSerializer(
+            data=request.data, context={"request": request}
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -35,6 +41,7 @@ class InterwalletTransactionListCreateView(APIView,CustomPagination):
 
 class InterwalletTransactionDetailView(APIView):
     """Retrieve, update, or delete an inter-wallet transaction."""
+
     permission_classes = [IsStaffOrOwner]
 
     def get_object(self, pk):
@@ -47,7 +54,7 @@ class InterwalletTransactionDetailView(APIView):
             self.check_object_permissions(request, transaction)
         except Exception as e:
             return not_found_response("Object Not Found")
-           
+
         serializer = InterWalletTransactionSerializer(transaction)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -64,7 +71,7 @@ class InterwalletTransactionDetailView(APIView):
         )
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
         return validation_error_response(serializer.errors)
 
     def delete(self, request, pk):
@@ -74,7 +81,7 @@ class InterwalletTransactionDetailView(APIView):
             self.check_object_permissions(request, transaction)
         except Exception as e:
             return not_found_response("Object Not Found")
-        
+
         # Revert balances
         source_wallet = transaction.source_wallet
         destination_wallet = transaction.destination_wallet

@@ -2,9 +2,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.exceptions import AuthenticationFailed, PermissionDenied, NotFound
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from uuid import UUID
@@ -20,15 +18,11 @@ from .serializers import (
     PasswordResetConfirmSerializer,
 )
 
-# from ...expense_tracker.common.utils
 from common.utils import (
-    success_response,
     validation_error_response,
     not_found_response,
-    permission_denied_response,
     CustomPagination,
 )
-from .models import ActiveAccessToken
 from .models import User
 from .tokens import TokenHandler
 from common.permissions import IsStaffUser
@@ -38,8 +32,9 @@ from .tasks import send_reset_password_email
 
 class RegisterView(APIView):
     """view for user Registration"""
-
+    authentication_classes = []
     permission_classes = [AllowAny]
+    
 
     def post(self, request):
         serializer = UserSerializer(data=request.data)
@@ -51,7 +46,7 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     """view for user login"""
-
+    authentication_classes=[]
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -81,7 +76,6 @@ class LogoutView(APIView):
 
 class UserListView(APIView, CustomPagination):
     """View for listing all users (staff only)"""
-
     permission_classes = [IsStaffUser]
 
     def get(self, request):
@@ -163,7 +157,7 @@ class UpdatePasswordView(APIView):
         Normal users can update their own password only.
         """
         try:
-            target_user = User.objects.get(id=id)
+            target_user = User.objects.get(id=id, is_active=True)
             self.check_object_permissions(request, target_user)
         except Exception as e:
             return not_found_response("User not found.")
@@ -180,6 +174,7 @@ class UpdatePasswordView(APIView):
 
 
 class PasswordResetRequestView(APIView):
+    authentication_classes=[]
     permission_classes = [AllowAny]
 
     def post(self, request):

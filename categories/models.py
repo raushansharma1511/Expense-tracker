@@ -1,7 +1,7 @@
 from django.db import models
 from account.models import User
 import uuid
-from common.base import BaseModel
+from common.models import BaseModel
 
 
 class Category(BaseModel):

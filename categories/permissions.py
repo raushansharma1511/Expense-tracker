@@ -10,6 +10,8 @@ class CanManageCategories(BasePermission):
     - Allow staff users to view all categories but only manage non-deleted ones.
     - Allow normal users to view, update, and delete only their own non-deleted categories.
     """
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
 
     def has_object_permission(self, request, view, obj):
         # Staff can view all categories

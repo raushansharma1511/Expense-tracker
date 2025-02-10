@@ -8,6 +8,7 @@ from django.db import transaction
 from .serializers import CategorySerializer
 from .models import Category
 from transactions.models import Transaction
+from budgets.models import Budget
 
 from .permissions import CanManageCategories
 from common.utils import (
@@ -24,12 +25,17 @@ class CategoryListCreateView(APIView, CustomPagination):
         """
         Retrieve all categories with custom pagination.
         """
+        category_type = request.query_params.get("type", None)
+
         if request.user.is_staff:
             categories = Category.objects.all()
         else:
             categories = Category.objects.filter(is_deleted=False).filter(
                 Q(is_predefined=True) | Q(user=request.user)
             )
+
+        if category_type:
+            categories = categories.filter(type=category_type)
         # Apply custom pagination
         paginated_categories = self.paginate_queryset(categories, request)
         serializer = CategorySerializer(paginated_categories, many=True)
@@ -61,7 +67,7 @@ class CategoryDetailView(APIView):
             self.check_object_permissions(request, category)
         except Exception as e:
             return not_found_response("Category not found")
-        
+
         serializer = CategorySerializer(category)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -88,9 +94,16 @@ class CategoryDetailView(APIView):
             self.check_object_permissions(request, category)
         except Exception as e:
             return not_found_response("Category not found")
-        
+
         with transaction.atomic():  # Use atomic transaction to ensure data consistency
-            Transaction.objects.filter(category=category).update(category=None)
+            if Transaction.objects.filter(category=category, is_deleted=False).exists():
+                return Response(
+                    {
+                        "error": "This category cannot be deleted as there associated trasaction exits."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            Budget.objects.filter(category=category).update(is_deleted=True)
 
         category.is_deleted = True
         category.save()

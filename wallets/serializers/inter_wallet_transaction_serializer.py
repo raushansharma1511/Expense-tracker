@@ -127,12 +127,6 @@ class InterWalletTransactionSerializer(serializers.ModelSerializer):
                 }
             )
 
-        # in create Ensure source wallet has enough balance
-        if not instance and source_wallet.balance < amount:
-            raise serializers.ValidationError(
-                {"amount": "Insufficient balance in the source wallet."}
-            )
-
         return data
 
     def create(self, validated_data):
@@ -179,15 +173,6 @@ class InterWalletTransactionSerializer(serializers.ModelSerializer):
                 destination_wallet.refresh_from_db()
 
                 # Apply new transaction
-                if source_wallet.balance < new_amount:
-                    raise serializers.ValidationError(
-                        {
-                            "error": {
-                                "source_wallet": "Insufficient balance in source walletdfghj."
-                            }
-                        }
-                    )
-
                 source_wallet.balance -= new_amount
                 destination_wallet.balance += new_amount
                 source_wallet.save()

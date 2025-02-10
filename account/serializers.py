@@ -52,7 +52,7 @@ class LogInSerializer(serializers.Serializer):
     def validate(self, data):
         user = authenticate(username=data["username"], password=data["password"])
         if user is None:
-            raise serializers.ValidationError({"detail":"Invalid credentials"})
+            raise serializers.ValidationError({"detail": "Invalid credentials"})
         return user
 
 
@@ -147,11 +147,14 @@ class UpdatePasswordSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         request_user = self.context["request"].user
+        target_user = self.context["target_user"]
 
         current_password = attrs.get("current_password")
         new_password = attrs["new_password"]
 
-        if not request_user.is_staff:
+        if not request_user.is_staff or (
+            request_user.is_staff == True and request_user == target_user
+        ):
             if not current_password:
                 raise serializers.ValidationError(
                     {"current_password": "Current password is required."}
@@ -162,8 +165,14 @@ class UpdatePasswordSerializer(serializers.Serializer):
                 )
             if current_password == new_password:
                 raise serializers.ValidationError(
-                    {"new_password":"New password cannot be the same as the old password."}
+                    {
+                        "new_password": "New password cannot be the same as the old password."
+                    }
                 )
+        if request_user.is_staff and target_user != request_user:
+            raise serializers.ValidationError(
+                {"detail": "you cannot update password of other staff users."}
+            )
 
         return attrs
 
@@ -171,13 +180,12 @@ class UpdatePasswordSerializer(serializers.Serializer):
         target_user = self.context["target_user"]
         target_user.set_password(self.validated_data["new_password"])
         target_user.save()
-        
+
         # Invalidate all active tokens except the current session
         current_token = self.context["request"].auth
         ActiveAccessToken.objects.filter(user=target_user).exclude(
             access_token=current_token
         ).delete()
-
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):
@@ -189,8 +197,8 @@ class PasswordResetRequestSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError("No user found with this email address.")
         return value
-    
-    
+
+
 class PasswordResetConfirmSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=True)
 

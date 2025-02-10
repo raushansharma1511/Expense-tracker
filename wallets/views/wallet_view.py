@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
 from ..models import Wallet, InterWalletTransaction
+from transactions.models import Transaction
 from ..serializers.wallet_serializer import WalletSerializer
 
 # from .permissions import IsOwnerOrStaffManagingOthers
@@ -56,7 +57,7 @@ class WalletDetailAPIView(APIView):
             return not_found_response("Object Not Found")
 
         serializer = WalletSerializer(wallet)
-        return Response(serializer.data,status=status.HTTP_200_OK)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request, pk):
         """Update wallet details (Normal: only name, Staff: can change user if no transactions exist)"""
@@ -83,7 +84,7 @@ class WalletDetailAPIView(APIView):
         except Exception as e:
             return not_found_response("Object Not Found")
 
-        if wallet.balance > 0:
+        if wallet.balance != 0:
             return Response(
                 {"error": "Cannot delete wallet with non-zero balance."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -96,6 +97,7 @@ class WalletDetailAPIView(APIView):
             or InterWalletTransaction.objects.filter(
                 destination_wallet=wallet, is_deleted=False
             ).exists()
+            or Transaction.objects.filter(wallet=wallet, is_deleted=False).exists()
         ):
             return Response(
                 {

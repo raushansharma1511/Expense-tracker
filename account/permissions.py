@@ -6,6 +6,10 @@ class IsStaffOrOwner(BasePermission):
     - Allow staff users to view all users but only manage non-deleted ones.
     - Allow normal users to view, update, and delete only their own non-deleted profile.
     """
+    
+    def has_permission(self, request, view):
+         return bool(request.user and request.user.is_authenticated)
+     
     def has_object_permission(self, request, view, obj):
         if request.method == "GET":
                 if request.user.is_staff:
@@ -17,3 +21,5 @@ class IsStaffOrOwner(BasePermission):
 
             # Normal users can only manage their own non-deleted categories
         return obj.is_active and (request.user.is_staff or obj == request.user)
+    
+                

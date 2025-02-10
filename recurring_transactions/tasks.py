@@ -8,14 +8,16 @@ from .models import RecurringTransaction
 
 
 @shared_task
-def send_transaction_notification(user_name, user_email, amount, type_name, category_name, wallet_name, next_run_date):
+def send_transaction_notification(
+    user_name, user_email, amount, type_name, category_name, wallet_name, next_run_date
+):
     """
     Asynchronously send email notification to user about the recurring transaction
     """
     type_name = type_name.upper()
-    
+
     subject = f"Recurring {type_name} Transaction Processed"
-    
+
     message = (
         f"Dear {user_name},\n\n"
         f"Your recurring {type_name} transaction has been processed successfully.\n\n"
@@ -38,7 +40,7 @@ def send_transaction_notification(user_name, user_email, amount, type_name, cate
             message=message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[user_email],
-            fail_silently=False
+            fail_silently=False,
         )
     except Exception as e:
         print(f"Failed to send email notification: {str(e)}")
@@ -48,21 +50,22 @@ def send_transaction_notification(user_name, user_email, amount, type_name, cate
 def process_recurring_transactions():
     """Process all due recurring transactions"""
     now = timezone.now()
-    
+
     # Get all non-deleted recurring transactions that are due
     recurring_transactions = RecurringTransaction.objects.filter(
-        next_run__lte=now, 
-        is_deleted=False
+        next_run__lte=now, is_deleted=False
     )
 
     for rec_txn in recurring_transactions:
         with transaction.atomic():
             # Check if related objects are deleted or if end_date has passed
-            if (not rec_txn.user.is_active or 
-                rec_txn.wallet.is_deleted or 
-                rec_txn.category.is_deleted or
-                (rec_txn.end_date and rec_txn.end_date < rec_txn.next_run)):
-                
+            if (
+                not rec_txn.user.is_active
+                or rec_txn.wallet.is_deleted
+                or rec_txn.category.is_deleted
+                or (rec_txn.end_date and rec_txn.end_date.date() < rec_txn.next_run.date())
+            ):
+
                 # Soft delete the recurring transaction
                 rec_txn.is_deleted = True
                 rec_txn.save()
@@ -75,12 +78,12 @@ def process_recurring_transactions():
                 category=rec_txn.category,
                 type=rec_txn.type,
                 amount=rec_txn.amount,
-                date_time=now,
+                date_time=rec_txn.next_run,
                 description=rec_txn.description,
             )
 
             # Update wallet balance
-            if rec_txn.type == 'credit':
+            if rec_txn.type == "credit":
                 rec_txn.wallet.balance += rec_txn.amount
             else:
                 rec_txn.wallet.balance -= rec_txn.amount
@@ -98,5 +101,5 @@ def process_recurring_transactions():
                 type_name=rec_txn.type,
                 category_name=rec_txn.category.name,
                 wallet_name=rec_txn.wallet.name,
-                next_run_date=rec_txn.next_run.strftime('%Y-%m-%d')
+                next_run_date=rec_txn.next_run.strftime("%Y-%m-%d"),
             )

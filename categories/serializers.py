@@ -20,12 +20,6 @@ class CategorySerializer(serializers.ModelSerializer):
             self.fields["user"].read_only = True
             self.fields["type"].read_only = True
 
-    # def normalize_category_name(self, name: str) -> str:
-    #     """Normalize category name by removing extra spaces and punctuation."""
-    #     name = name.strip().lower()
-    #     name = re.sub(r"[^\w\s]", "", name)
-    #     name = re.sub(r"\s+", " ", name)
-    #     return name
 
     def validate_user(self, user):
         """Validate the user field."""
@@ -40,7 +34,7 @@ class CategorySerializer(serializers.ModelSerializer):
                     "You can create categories for yourself only."
                 )
         else:
-            if user != request.user and user.is_staff:
+            if user.is_staff and user != request.user:
                 raise serializers.ValidationError(
                     "You cannot create a category on behalf of other staff user"
                 )

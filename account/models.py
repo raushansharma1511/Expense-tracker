@@ -29,6 +29,9 @@ class CustomUserManager(BaseUserManager):
     def create_superuser(self, username, email, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
+        
+        # if email is None:
+        #     email = input("Email: ")
 
         if extra_fields.get("is_staff") is not True:
             raise ValueError("Superuser must have is_staff=True.")
@@ -59,6 +62,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = CustomUserManager()
 
     USERNAME_FIELD = "username"
+    REQUIRED_FIELDS= ["email"]
 
     def __str__(self):
         return f"{self.username} ({self.email})"

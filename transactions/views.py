@@ -1,13 +1,11 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 
 from django.shortcuts import get_object_or_404
 from django.db import transaction as db_transaction
-from datetime import datetime, timedelta
 from .models import Transaction, Category
-from .serializers import TransactionSerializer, MonthlySummarySerializer
+from .serializers import TransactionSerializer
 from common.utils import (
     CustomPagination,
     validation_error_response,
@@ -45,7 +43,6 @@ class TransactionListCreateView(APIView, CustomPagination):
 
         if serializer.is_valid():
             transaction = serializer.save()
-            print(transaction)
             track_and_notify_budget.delay(transaction.id)
             return Response(
                 serializer.data,
@@ -113,36 +110,3 @@ class TransactionDetailView(APIView):
             transaction.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
-class MonthlySummaryView(APIView):
-    """
-    View for showing the monthly summary report of income, expense, and balance of a user,
-    including category-wise credit and debit.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        today = datetime.today()
-        start_of_month = today.replace(day=1)
-        end_of_month = (today.replace(day=28) + timedelta(days=4)).replace(
-            day=1
-        ) - timedelta(days=1)
-
-        # Filter transactions for the user and the current month
-        transactions = Transaction.objects.filter(
-            user=request.user,
-            date__gte=start_of_month,
-            date__lte=end_of_month,
-            is_deleted=False,
-        )
-        # Calculate summary using the serializer
-        summary_data = MonthlySummarySerializer.calculate_summary(transactions)
-
-        return Response(
-            {
-                "message": "Monthly summary retrieved successfully.",
-                "data": summary_data,
-            },
-            status=status.HTTP_200_OK,
-        )
