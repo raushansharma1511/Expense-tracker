@@ -11,6 +11,7 @@ from common.utils import (
 )
 from .models import Budget
 from .serializers import BudgetSerializer
+from .tasks import track_and_notify_budget
 
 
 
@@ -33,7 +34,8 @@ class BudgetListCreateView(APIView, CustomPagination):
         """Create a new budget"""
         serializer = BudgetSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
-            serializer.save()
+            budget = serializer.save()
+            track_and_notify_budget.delay(budget.id)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return validation_error_response(serializer.errors)
 
@@ -51,36 +53,43 @@ class BudgetDetailView(APIView):
         try:
             budget = self._get_object(pk)
             self.check_object_permissions(request, budget)
-
-            serializer = BudgetSerializer(budget)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
         except Exception as e:
             return not_found_response("Budget not found")
+        
+        serializer = BudgetSerializer(budget)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+       
 
     def patch(self, request, pk):
         """Update a budget"""
         try:
             budget = self._get_object(pk)
             self.check_object_permissions(request, budget)
-            serializer = BudgetSerializer(
-                budget, data=request.data, context={"request": request}, partial=True
-            )
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return validation_error_response(serializer.errors)
+            
         except Exception as e:
             return not_found_response("Budget not found")
-
+        
+        serializer = BudgetSerializer(
+            budget, data=request.data, context={"request": request}, partial=True
+        )
+        if serializer.is_valid():
+            budget = serializer.save()
+            track_and_notify_budget.delay(budget.id)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return validation_error_response(serializer.errors)
+    
+    
     def delete(self, request, pk):
         """Soft delete a budget"""
         try:
             budget = self._get_object(pk)
             self.check_object_permissions(request, budget)
-            budget.is_deleted = True
-            budget.save()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-
         except Exception as e:
             return not_found_response("Budget not found")
+        
+        budget.is_deleted = True
+        budget.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+        

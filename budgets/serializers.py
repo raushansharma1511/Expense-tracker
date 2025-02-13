@@ -66,7 +66,7 @@ class BudgetSerializer(serializers.ModelSerializer):
         return user
 
     def _get_budget_user(self):
-        """Helper method to get and validate the transaction user based on context."""
+        """Helper method to get user"""
         if self.instance:
             return self.instance.user
 
@@ -107,7 +107,6 @@ class BudgetSerializer(serializers.ModelSerializer):
                 raise ValidationError(
                     "Invalid format, must provide month and year in format MM-YYYY"
                 )
-
             month = int(parts[0])
             year = int(parts[1])
 
@@ -146,6 +145,9 @@ class BudgetSerializer(serializers.ModelSerializer):
                 month=self._validated_month,
                 is_deleted=False,
             ).exists()
+            
+            print(data["amount"]) 
+            print(type(data["amount"]))
 
             if existing_budget:
                 raise ValidationError(
@@ -168,7 +170,6 @@ class BudgetSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         """Update budget and recalculate exhausted amount"""
         budget = super().update(instance, validated_data)
-
         return budget
 
     def get_spent_amount(self, obj):
