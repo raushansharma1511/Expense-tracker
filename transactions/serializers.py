@@ -181,6 +181,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             old_wallet.save()
 
             new_wallet.refresh_from_db()
+            old_wallet.refresh_from_db()
 
             # Apply new transaction
             if instance.type == "credit":
@@ -188,9 +189,6 @@ class TransactionSerializer(serializers.ModelSerializer):
             else:
                 new_wallet.balance -= new_amount
 
-            # Only save new wallet if different from old wallet
-            if new_wallet != old_wallet:
-                new_wallet.save()
-            old_wallet.save()
+            new_wallet.save()
 
         return super().update(instance, validated_data)

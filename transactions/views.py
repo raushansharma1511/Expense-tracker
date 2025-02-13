@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 
 from django.shortcuts import get_object_or_404
 from django.db import transaction as db_transaction
@@ -12,12 +13,14 @@ from common.utils import (
     not_found_response,
 )
 from common.permissions import IsStaffOrOwner
-from .tasks import track_and_notify_budget
+from .tasks import handle_transaction
 
 
 # View for listing and creating transactions
 class TransactionListCreateView(APIView, CustomPagination):
     """Api view for listing all transactions and creating a new transaction"""
+
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         """
@@ -43,7 +46,7 @@ class TransactionListCreateView(APIView, CustomPagination):
 
         if serializer.is_valid():
             transaction = serializer.save()
-            track_and_notify_budget.delay(transaction.id)
+            handle_transaction.delay(transaction.id)
             return Response(
                 serializer.data,
                 status=status.HTTP_201_CREATED,
@@ -84,7 +87,7 @@ class TransactionDetailView(APIView):
         )
         if serializer.is_valid():
             transaction = serializer.save()
-            track_and_notify_budget.delay(transaction.id)
+            handle_transaction.delay(transaction.id)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return validation_error_response(serializer.errors)
 
@@ -102,11 +105,8 @@ class TransactionDetailView(APIView):
                 wallet.balance += transaction.amount  # Revert deduction
             else:
                 wallet.balance -= transaction.amount  # Revert addition
-                if wallet.balance < 0:
-                    wallet.balance = 0
 
             wallet.save()
             transaction.is_deleted = True
             transaction.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
