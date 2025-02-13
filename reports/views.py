@@ -3,8 +3,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from django.db.models import Sum, F
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from datetime import datetime
 
 from transactions.models import Transaction
@@ -16,7 +14,6 @@ from .serializers import (
 from account.models import User
 from common.utils import is_valid_uuid
 from .tasks import send_transaction_history_email
-
 
 
 def parse_and_validate_dates(request):
@@ -53,7 +50,7 @@ def parse_and_validate_dates(request):
 def fetch_transactions(user, start_date, end_date):
     """Helper function to retrieve transactions for a user within a date range."""
     return Transaction.objects.filter(
-        user=user, is_deleted=False, date_time__date__range=(start_date, end_date)
+        user=user, is_deleted=False, date_time__range=(start_date, end_date)
     )
 
 
@@ -80,7 +77,7 @@ def calculate_percentage(data_list, total_amount, percentage_key):
     """Helper function to calculate category percentage contribution."""
     return [
         {
-            "category_name": entry["category__name"],
+            "category_name": entry["category_name"],
             "amount": float(entry["total"]),
             percentage_key: round((entry["total"] / total_amount) * 100, 2),
         }
@@ -123,7 +120,7 @@ def get_target_user(request):
 
 
 class TransactionReportAPI(APIView):
-    @method_decorator(cache_page(60 * 15))  # Cache for 15 minutes
+
     def get(self, request):
         start_date, end_date, error_response = parse_and_validate_dates(request)
         if error_response:
@@ -154,11 +151,11 @@ class TransactionReportAPI(APIView):
         ).data
 
         interwallet_transactions = InterWalletTransaction.objects.filter(
-            user=request.user, is_deleted=False, date__range=(start_date, end_date)
+            user=request.user, is_deleted=False, date_time__range=(start_date, end_date)
         )
 
         interwallet_data = InterWalletTransactionReportSerializer(
-            interwallet_transactions.order_by("-date"), many=True
+            interwallet_transactions.order_by("-date_time"), many=True
         ).data
 
         response_data = {
@@ -176,6 +173,7 @@ class TransactionReportAPI(APIView):
 
 
 class SpendingTrendsView(APIView):
+
     def get(self, request):
         start_date, end_date, error_response = parse_and_validate_dates(request)
         if error_response:

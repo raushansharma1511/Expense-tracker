@@ -3,13 +3,12 @@ from transactions.models import Transaction
 from wallets.models import InterWalletTransaction
 
 class TransactionReportSerializer(serializers.ModelSerializer):
-    category = serializers.CharField(source='category.name')
+    category_name = serializers.CharField(source='category.name')
     wallet = serializers.CharField(source='wallet.name')
-    date = serializers.DateTimeField(source='date_time')
 
     class Meta:
         model = Transaction
-        fields = ['category', 'amount', 'wallet', 'date']
+        fields = ['category_name', 'amount', 'wallet', 'date_time']
     
     def get_date(self, obj):
         return obj.date_time.date()
@@ -20,4 +19,4 @@ class InterWalletTransactionReportSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = InterWalletTransaction
-        fields = ['source_wallet', 'destination_wallet', 'amount', 'date']
+        fields = ['source_wallet', 'destination_wallet', 'amount', 'date_time']
