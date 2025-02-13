@@ -49,11 +49,6 @@ urlpatterns = [
     path("api/budgets/", include("budgets.urls")),
     path("api/interwallet-transactions/", include("wallets.urls.interwallet_url")),
     path("api/recurring-transactions/", include("recurring_transactions.urls")),
-    path("api/transaction-report/", include("reports.urls")),
-    path(
-        "api/transaction-history-export/",
-        TransactionHistoryExportView.as_view(),
-        name="transaction-history-export",
-    ),
+    path("api/", include("reports.urls")),
 ]
 

@@ -44,7 +44,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "django_celery_beat",
-    'django_celery_results',
+    "django_celery_results",
     "drf_yasg",
     "account",
     "transactions",
@@ -57,13 +57,11 @@ INSTALLED_APPS = [
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "account.authentication.CustomJWTAuthentication",
-        # "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
     ],
     "EXCEPTION_HANDLER": "common.exceptions.custom_exception_handler",
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
-    "PAGE_SIZE": 1,
-
 }
 from datetime import timedelta
 
@@ -141,7 +139,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "Asia/Kolkata"
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -176,7 +174,7 @@ from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     "process-recurring-transactions": {
         "task": "recurring_transactions.tasks.process_recurring_transactions",
-        "schedule": crontab(minute="*/5"),  # Run every 15 minutes
+        "schedule": crontab(minute="*/1"),  # Run every 15 minutes
     },
 }
 

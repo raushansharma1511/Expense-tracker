@@ -7,19 +7,19 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 
 
 class CustomPagination(PageNumberPagination):
-    page_size = 10  # Default number of items per page
-    page_size_query_param = "page_size"  # Allow client to set page size
-    max_page_size = 100  # Maximum page size allowed
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
     def get_paginated_response(self, data):
         return Response(
             {
-                "count": self.page.paginator.count,  # Total number of items
+                "count": self.page.paginator.count,
                 "next": self.get_next_link(),
                 "previous": self.get_previous_link(),
-                "page": self.page.number,  # Current page number
-                "total_pages": self.page.paginator.num_pages,  # Total pages
-                "items": data,  # Paginated data
+                "page": self.page.number,
+                "total_pages": self.page.paginator.num_pages,
+                "items": data,
             }
         )
 
@@ -48,14 +48,12 @@ def validation_error_response(errors):
     return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
 import uuid
+
 
 def is_valid_uuid(value):
     try:
-        # Try to create a UUID object from the given string.
         uuid_obj = uuid.UUID(value)
-        return True  # If no error, it's a valid UUID.
+        return True
     except ValueError:
-        # If ValueError is raised, the string is not a valid UUID.
         return False

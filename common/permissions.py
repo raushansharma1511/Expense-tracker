@@ -8,10 +8,7 @@ class IsStaffUser(BasePermission):
     """
 
     def has_permission(self, request, view):
-        print(request.user)
-        if not request.user.is_staff:
-            return False
-        return True
+        return bool(request.user and request.user.is_authenticated) and request.user.is_staff
 
 
 class IsStaffOrOwner(BasePermission):
@@ -32,7 +29,6 @@ class IsStaffOrOwner(BasePermission):
                     return True
             return False
 
-        # Normal users can only manage their own non-deleted categories
         return obj.is_deleted == False and (
             request.user.is_staff or obj.user == request.user
         )

@@ -9,4 +9,4 @@ class BaseModel(models.Model):
     is_deleted = models.BooleanField(default=False)
 
     class Meta:
-        abstract = True  # This ensures BaseModel is abstract and won't create a table
+        abstract = True 
