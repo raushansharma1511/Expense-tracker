@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
+from django.db import transaction as db_transaction
 from ..models import InterWalletTransaction
 from ..serializers.inter_wallet_transaction_serializer import (
     InterWalletTransactionSerializer,
@@ -18,11 +19,11 @@ class InterwalletTransactionListCreateView(APIView, CustomPagination):
     def get(self, request):
         """Fetch all transactions (staff can see all, normal users see their own)."""
         if request.user.is_staff:
-            transactions = InterWalletTransaction.objects.all()
+            transactions = InterWalletTransaction.objects.all().order_by("created_at")
         else:
             transactions = InterWalletTransaction.objects.filter(
                 user=request.user, is_deleted=False
-            )
+            ).order_by("created_at")
 
         paginated_trasactions = self.paginate_queryset(transactions, request)
         serializer = InterWalletTransactionSerializer(paginated_trasactions, many=True)
@@ -53,7 +54,7 @@ class InterwalletTransactionDetailView(APIView):
             transaction = self.get_object(pk)
             self.check_object_permissions(request, transaction)
         except Exception as e:
-            return not_found_response("Object Not Found")
+            return not_found_response("Transaction Not Found")
 
         serializer = InterWalletTransactionSerializer(transaction)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -64,7 +65,7 @@ class InterwalletTransactionDetailView(APIView):
             transaction = self.get_object(pk)
             self.check_object_permissions(request, transaction)
         except Exception as e:
-            return not_found_response("Object Not Found")
+            return not_found_response("Transaction Not Found")
 
         serializer = InterWalletTransactionSerializer(
             transaction, data=request.data, partial=True, context={"request": request}
@@ -80,18 +81,19 @@ class InterwalletTransactionDetailView(APIView):
             transaction = self.get_object(pk)
             self.check_object_permissions(request, transaction)
         except Exception as e:
-            return not_found_response("Object Not Found")
+            return not_found_response("Transaction Not Found")
+        
+        with db_transaction.atomic():
+            # Revert balances
+            source_wallet = transaction.source_wallet
+            destination_wallet = transaction.destination_wallet
 
-        # Revert balances
-        source_wallet = transaction.source_wallet
-        destination_wallet = transaction.destination_wallet
+            source_wallet.balance += transaction.amount
+            destination_wallet.balance -= transaction.amount
 
-        source_wallet.balance += transaction.amount
-        destination_wallet.balance -= transaction.amount
+            source_wallet.save(update_fields=["balance"])
+            destination_wallet.save(update_fields=["balance"])
 
-        source_wallet.save(update_fields=["balance"])
-        destination_wallet.save(update_fields=["balance"])
-
-        transaction.is_deleted = True
-        transaction.save(update_fields=["is_deleted"])
-        return Response(status=status.HTTP_204_NO_CONTENT)
+            transaction.is_deleted = True
+            transaction.save(update_fields=["is_deleted"])
+            return Response(status=status.HTTP_204_NO_CONTENT)

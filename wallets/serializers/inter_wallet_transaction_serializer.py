@@ -4,6 +4,8 @@ from wallets.models import Wallet
 from account.models import User
 from django.db import transaction as db_transaction
 from common.utils import is_valid_uuid
+from django.db import IntegrityError
+
 
 
 class InterWalletTransactionSerializer(serializers.ModelSerializer):
@@ -16,7 +18,7 @@ class InterWalletTransactionSerializer(serializers.ModelSerializer):
             "destination_wallet",
             "amount",
             "description",
-            "date",
+            "date_time",
             "is_deleted",
             "created_at",
             "updated_at",
@@ -34,6 +36,9 @@ class InterWalletTransactionSerializer(serializers.ModelSerializer):
     def validate_user(self, user):
         """Ensure staff can only create transactions for others, and normal users for themselves."""
         request_user = self.context["request"].user
+        
+        if user.is_active == False:
+            raise serializers.ValidationError("User not found")
 
         if request_user.is_staff:
             if user.is_staff or request_user == user:
@@ -45,8 +50,6 @@ class InterWalletTransactionSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "You can only create transactions for yourself."
                 )
-        if user.is_active == False:
-            raise serializers.ValidationError("User not found")
 
         return user
 
@@ -137,17 +140,19 @@ class InterWalletTransactionSerializer(serializers.ModelSerializer):
             amount = validated_data["amount"]
 
             # Deduct from source wallet
-            source_wallet.balance -= amount
-            source_wallet.save()
+            with db_transaction.atomic():
+                source_wallet.balance -= amount
+                source_wallet.save()
 
-            # Add to destination wallet
-            destination_wallet.balance += amount
-            destination_wallet.save()
+                # Add to destination wallet
+                destination_wallet.balance += amount
+                destination_wallet.save()
 
-            return super().create(validated_data)
+                return super().create(validated_data)
 
     def update(self, instance, validated_data):
         """Update an existing transaction and auto-adjust wallet balances."""
+
         with db_transaction.atomic():
             old_amount = instance.amount
             new_amount = validated_data.get("amount", old_amount)

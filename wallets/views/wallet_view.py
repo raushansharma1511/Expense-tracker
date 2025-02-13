@@ -22,9 +22,11 @@ class WalletListCreateView(APIView, CustomPagination):
     def get(self, request):
         """Retrieve wallets (Staff see all, normal users see their own)"""
         if request.user.is_staff:
-            wallets = Wallet.objects.filter(is_deleted=False)
+            wallets = Wallet.objects.all().order_by("created_at")
         else:
-            wallets = Wallet.objects.filter(user=request.user, is_deleted=False)
+            wallets = Wallet.objects.filter(
+                user=request.user, is_deleted=False
+            ).order_by("created_at")
 
         paginated_wallets = self.paginate_queryset(wallets, request)
         serializer = WalletSerializer(paginated_wallets, many=True)
@@ -54,7 +56,7 @@ class WalletDetailAPIView(APIView):
             wallet = self.get_object(pk, request)
             self.check_object_permissions(request, wallet)
         except Exception as e:
-            return not_found_response("Object Not Found")
+            return not_found_response("Wallet Not Found")
 
         serializer = WalletSerializer(wallet)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -65,7 +67,7 @@ class WalletDetailAPIView(APIView):
             wallet = self.get_object(pk, request)
             self.check_object_permissions(request, wallet)
         except Exception as e:
-            return not_found_response("Object Not Found")
+            return not_found_response("Wallet Not Found")
 
         serializer = WalletSerializer(
             wallet, data=request.data, partial=True, context={"request": request}
@@ -82,7 +84,7 @@ class WalletDetailAPIView(APIView):
             wallet = self.get_object(pk, request)
             self.check_object_permissions(request, wallet)
         except Exception as e:
-            return not_found_response("Object Not Found")
+            return not_found_response("Wallet Not Found")
 
         if wallet.balance != 0:
             return Response(

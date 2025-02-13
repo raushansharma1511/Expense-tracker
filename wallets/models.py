@@ -18,7 +18,7 @@ class InterWalletTransaction(BaseModel):
     source_wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name="source_transactions")
     destination_wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name="destination_transactions")
     amount = models.DecimalField(max_digits=15, decimal_places=2)
-    date = models.DateField()
+    date_time = models.DateTimeField()
     description = models.TextField(blank=True)
 
     def __str__(self):

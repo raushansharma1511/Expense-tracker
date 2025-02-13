@@ -24,40 +24,40 @@ class WalletSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         request = self.context.get("request", None)
 
-        # Normal users cannot update 'user' field
-        if request and request.method in ["PATCH", "PUT"]:
+        if request and request.method in ["PATCH"]:
             self.fields["user"].read_only = True
 
     def validate_user(self, user):
-        """Validate that staff users can only create wallets for others."""
+        """Validate that staff users can only create wallets for other normal users and normal user is for himself only."""
         request_user = self.context["request"].user
-        
-        if request_user.is_staff and user.is_staff:
-            raise serializers.ValidationError(
-                "Staff cannot create wallets for themselves."
-            )
+
+        if user.is_active == False:
+            raise serializers.ValidationError("User not found")
 
         if not request_user.is_staff and request_user != user:
             raise serializers.ValidationError(
                 "You can only create wallets for yourself."
             )
 
-        if user.is_active == False:
-            raise serializers.ValidationError("User not found")
-
+        if request_user.is_staff and user.is_staff:
+            raise serializers.ValidationError(
+                "Staff cannot create wallets for themselves."
+            )
         return user
 
     def _validate_wallet_name(self, value, user):
         """Ensure wallet name is unique per user."""
-        value = slugify(value).strip()
+        value = value.strip()
 
         # Check the length of the wallet name
-        if len(value) < 3:
+        if len(value) < 1:
             raise serializers.ValidationError(
-                {"name": "The wallet name must be at least 3 characters long."}
+                {"name": "The wallet name must be at least 1 characters long."}
             )
 
-        if Wallet.objects.filter(user=user, name=value, is_deleted=False).exists():
+        if Wallet.objects.filter(
+            user=user, name__iexact=value, is_deleted=False
+        ).exists():
             raise serializers.ValidationError(
                 {"name": "A wallet with this name already exists."}
             )
