@@ -5,11 +5,19 @@ from django.core.mail import send_mail
 from django.conf import settings
 from transactions.models import Transaction
 from .models import RecurringTransaction
+from transactions.tasks import handle_transaction
 
 
 @shared_task
 def send_transaction_notification(
-    user_name, user_email, amount, type_name, category_name, wallet_name, next_run_date
+    user_name,
+    user_email,
+    amount,
+    type_name,
+    category_name,
+    wallet_name,
+    transaction_date,
+    next_run_date,
 ):
     """
     Asynchronously send email notification to user about the recurring transaction
@@ -21,13 +29,12 @@ def send_transaction_notification(
     message = (
         f"Dear {user_name},\n\n"
         f"Your recurring {type_name} transaction has been processed successfully.\n\n"
-        f"Transaction Details:\n"
-        f"-------------------------\n"
-        f"Amount: {'+ $' if type_name == 'credit' else '- $'}{amount}\n"
+        f"Transaction Details:\n\n"
+        f"Amount: Rs {amount}\n"
         f"Category: {category_name}\n"
         f"Wallet: {wallet_name}\n"
-        f"Transaction Date: {timezone.now().strftime('%B %d, %Y')}\n"  # Only showing the date
-        f"Next Scheduled Transaction: {next_run_date}\n\n"
+        f"Transaction Date: {transaction_date.strftime('%B %d, %Y')}\n"  # Only showing the date
+        f"Next Scheduled Transaction: {next_run_date.strftime('%B %d, %Y')}\n\n"
         f"We are pleased to inform you that your transaction has been processed smoothly.\n"
         f"You can check your transaction history anytime in your account.\n\n"
         f"This is an automated message. Please do not reply to this email.\n\n"
@@ -63,7 +70,10 @@ def process_recurring_transactions():
                 not rec_txn.user.is_active
                 or rec_txn.wallet.is_deleted
                 or rec_txn.category.is_deleted
-                or (rec_txn.end_date and rec_txn.end_date.date() < rec_txn.next_run.date())
+                or (
+                    rec_txn.end_date
+                    and rec_txn.end_date.date() < rec_txn.next_run.date()
+                )
             ):
 
                 # Soft delete the recurring transaction
@@ -81,6 +91,7 @@ def process_recurring_transactions():
                 date_time=rec_txn.next_run,
                 description=rec_txn.description,
             )
+            handle_transaction.delay(new_transaction.id)
 
             # Update wallet balance
             if rec_txn.type == "credit":
@@ -93,6 +104,8 @@ def process_recurring_transactions():
             rec_txn.next_run = rec_txn.get_next_run_date(rec_txn.next_run)
             rec_txn.save()
 
+            rec_txn.refresh_from_db()
+
             # Send email notification asynchronously
             send_transaction_notification.delay(
                 user_name=rec_txn.user.name,
@@ -101,5 +114,6 @@ def process_recurring_transactions():
                 type_name=rec_txn.type,
                 category_name=rec_txn.category.name,
                 wallet_name=rec_txn.wallet.name,
-                next_run_date=rec_txn.next_run.strftime("%Y-%m-%d"),
+                transaction_date=new_transaction.date_time,
+                next_run_date=rec_txn.next_run,
             )

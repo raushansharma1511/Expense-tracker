@@ -54,40 +54,44 @@ class RecurringTransactionDetailView(APIView):
         try:
             recurring_transaction = self.get_object(id, request)
             self.check_object_permissions(request, recurring_transaction)
-            serializer = RecurringTransactionSerializer(recurring_transaction)
-            return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             return not_found_response("Recurring Transaction not found.")
+        
+        serializer = RecurringTransactionSerializer(recurring_transaction)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+       
 
     def patch(self, request, id):
         """Update specific recurring transaction"""
         try:
             recurring_transaction = self.get_object(id, request)
             self.check_object_permissions(request, recurring_transaction)
-            serializer = RecurringTransactionSerializer(
-                recurring_transaction,
-                data=request.data,
-                partial=True,
-                context={"request": request},
-            )
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return validation_error_response(serializer.errors)
-
         except Exception as e:
             return not_found_response("Recurring Transaction not found.")
+        
+        serializer = RecurringTransactionSerializer(
+            recurring_transaction,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return validation_error_response(serializer.errors)
+
+        
 
     def delete(self, request, id):
         """Soft delete recurring transaction"""
         try:
             recurring_transaction = self.get_object(id, request)
             self.check_object_permissions(request, recurring_transaction)
-            with db_transaction.atomic():
-                recurring_transaction.is_deleted = True
-                recurring_transaction.save()
-
-            return Response(status=status.HTTP_204_NO_CONTENT)
-
         except Exception as e:
             return not_found_response("Recurring Transaction not found.")
+        
+        with db_transaction.atomic():
+            recurring_transaction.is_deleted = True
+            recurring_transaction.save()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)

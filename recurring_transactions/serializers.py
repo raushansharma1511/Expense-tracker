@@ -24,9 +24,8 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
             "end_date",
             "next_run",
             "description",
-            "status",
         ]
-        read_only_fields = ["id", "next_run"]
+        read_only_fields = ["id", "next_run", "status"]
 
     def __init__(self, *args, **kwargs):
         """Ensure user field is ignored silently if present for normal users."""
@@ -140,13 +139,12 @@ class RecurringTransactionSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        """Create with next_run set to start_date"""
+        # Create with next_run set to start_date
         validated_data["next_run"] = validated_data["start_date"]
         return super().create(validated_data)
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        """Update recurring transaction with comprehensive checks"""
         if "start_date" in validated_data:
             # If start_date is updated, set next_run to new start_date
             validated_data["next_run"] = validated_data["start_date"]
