@@ -29,7 +29,7 @@ class CustomUserManager(BaseUserManager):
     def create_superuser(self, username, email, password=None, **extra_fields):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
-        
+
         # if email is None:
         #     email = input("Email: ")
 
@@ -52,7 +52,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=100)
-    phone_no = models.CharField(max_length=13, blank=True, null=True)
+    phone_number = models.CharField(
+        max_length=13, validators=[phone_number_validator], blank=True, null=True
+    )
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
@@ -62,7 +64,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = CustomUserManager()
 
     USERNAME_FIELD = "username"
-    REQUIRED_FIELDS= ["email"]
+    REQUIRED_FIELDS = ["email"]
 
     def __str__(self):
         return f"{self.username} ({self.email})"

@@ -3,10 +3,11 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
 import re
-from django.contrib.auth.password_validation import validate_password
+from .validators import validate_password
 
 from .models import User, ActiveAccessToken
 from .tokens import TokenHandler
+from .tasks import soft_delete_user_related_objects
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -18,7 +19,7 @@ class UserSerializer(serializers.ModelSerializer):
             "password",
             "email",
             "name",
-            "phone_no",
+            "phone_number",
             "created_at",
             "updated_at",
             "is_active",
@@ -29,14 +30,6 @@ class UserSerializer(serializers.ModelSerializer):
 
     def validate_password(self, value):
         validate_password(value)
-        return value
-
-    def validate_phone_no(self, value):
-        """Validate the phone number format to ensure it matches the expected format: +91XXXXXXXXXX."""
-        if value and not re.match(r"^\+91\d{10}$", value):
-            raise serializers.ValidationError(
-                "Phone number must be in the format +91XXXXXXXXXX."
-            )
         return value
 
     def create(self, validated_data):
@@ -50,7 +43,10 @@ class LogInSerializer(serializers.Serializer):
     password = serializers.CharField()
 
     def validate(self, data):
-        user = authenticate(username=data["username"], password=data["password"])
+        username = data.get("username")
+        password = data.get("password")
+
+        user = authenticate(username=username, password=password)
         if user is None:
             raise serializers.ValidationError({"detail": "Invalid credentials"})
         return user
@@ -81,18 +77,18 @@ class LogoutSerializer(serializers.Serializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "name", "phone_no", "is_staff"]
-        read_only_fields = ["id", "is_staff"]
-
-    def validate_phone_no(self, value):
-        """
-        Validate the phone number format to ensure it matches the expected format: +91XXXXXXXXXX.
-        """
-        if value and not re.match(r"^\+91\d{10}$", value):
-            raise serializers.ValidationError(
-                "Phone number must be in the format +91XXXXXXXXXX."
-            )
-        return value
+        fields = [
+            "id",
+            "username",
+            "email",
+            "name",
+            "phone_number",
+            "created_at",
+            "updated_at",
+            "is_active",
+            "is_staff",
+        ]
+        read_only_fields = ["id", "is_staff", "created_at", "updated_at", "is_active"]
 
 
 class UserDeleteSerializer(serializers.Serializer):
@@ -134,12 +130,13 @@ class UserDeleteSerializer(serializers.Serializer):
     def delete_user(self, user):
         user.is_active = False
         user.save()
-        TokenHandler.invalidate_user_tokens(user)
+        soft_delete_user_related_objects.delay(user.id)
 
 
 class UpdatePasswordSerializer(serializers.Serializer):
     current_password = serializers.CharField(write_only=True, required=False)
     new_password = serializers.CharField(write_only=True)
+    confirm_new_password = serializers.CharField(write_only=True)
 
     def validate_new_password(self, value):
         validate_password(value)
@@ -151,34 +148,36 @@ class UpdatePasswordSerializer(serializers.Serializer):
 
         current_password = attrs.get("current_password")
         new_password = attrs["new_password"]
+        confirm_new_password = attrs["confirm_new_password"]
 
-        if not request_user.is_staff or (
-            request_user.is_staff == True and request_user == target_user
-        ):
-            if not current_password:
-                raise serializers.ValidationError(
-                    {"current_password": "Current password is required."}
-                )
-            if not check_password(current_password, request_user.password):
-                raise serializers.ValidationError(
-                    {"current_password": "Invalid current password."}
-                )
-            if current_password == new_password:
-                raise serializers.ValidationError(
-                    {
-                        "new_password": "New password cannot be the same as the old password."
-                    }
-                )
-        if request_user.is_staff and target_user != request_user:
+        if new_password != confirm_new_password:
             raise serializers.ValidationError(
-                {"detail": "you cannot update password of other staff users."}
+                {"confirm_new_password": "New passwords do not match."}
+            )
+
+        if request_user.is_superuser:
+            return attrs
+
+        if not current_password:
+            raise serializers.ValidationError(
+                {"current_password": "Current password is required."}
+            )
+        if not request_user.check_password(current_password):
+            raise serializers.ValidationError(
+                {"current_password": "Invalid current password."}
+            )
+        if current_password == new_password:
+            raise serializers.ValidationError(
+                {"new_password": "New password cannot be the same as the old password."}
             )
 
         return attrs
 
     def update_password(self):
         target_user = self.context["target_user"]
-        target_user.set_password(self.validated_data["new_password"])
+        new_password = self.validated_data["new_password"]
+
+        target_user.set_password(new_password)  # Hash and update the password
         target_user.save()
 
         # Invalidate all active tokens except the current session
@@ -193,7 +192,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         try:
-            user = User.objects.get(email=value)
+            user = User.objects.get(email=value, is_active=True)
         except User.DoesNotExist:
             raise serializers.ValidationError("No user found with this email address.")
         return value

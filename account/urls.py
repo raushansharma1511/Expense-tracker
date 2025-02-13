@@ -20,7 +20,9 @@ urlpatterns = [
         PasswordResetRequestView.as_view(),
         name="password-reset",
     ),
-    path("auth/password-reset/confirm/<str:uidb64>/<str:token>/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
+    path("auth/password-reset-confirm/<str:token>/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
+    
+    
     path("users/", UserListView.as_view(), name="get-users"),
     path("users/<uuid:id>/", UserDetailView.as_view(), name="get-update-delete-user"),
     path(

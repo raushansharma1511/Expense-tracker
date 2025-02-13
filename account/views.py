@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.tokens import default_token_generator
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.core.signing import TimestampSigner, BadSignature
 from uuid import UUID
 
 from .serializers import (
@@ -32,9 +32,8 @@ from .tasks import send_reset_password_email
 
 class RegisterView(APIView):
     """view for user Registration"""
-    authentication_classes = []
+    authentication_classes=[]
     permission_classes = [AllowAny]
-    
 
     def post(self, request):
         serializer = UserSerializer(data=request.data)
@@ -50,6 +49,7 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+
         serializer = LogInSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data
@@ -76,6 +76,7 @@ class LogoutView(APIView):
 
 class UserListView(APIView, CustomPagination):
     """View for listing all users (staff only)"""
+
     permission_classes = [IsStaffUser]
 
     def get(self, request):
@@ -151,7 +152,7 @@ class UserDetailView(APIView):
 class UpdatePasswordView(APIView):
     permission_classes = [IsStaffOrOwner]
 
-    def put(self, request, id):
+    def patch(self, request, id):
         """
         Allow staff users to update any user's password.
         Normal users can update their own password only.
@@ -159,6 +160,15 @@ class UpdatePasswordView(APIView):
         try:
             target_user = User.objects.get(id=id, is_active=True)
             self.check_object_permissions(request, target_user)
+            if (
+                request.user.is_staff
+                and not request.user.is_superuser
+                and target_user != request.user
+            ):
+                return Response(
+                    {"error": "you can only change the password of yours."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         except Exception as e:
             return not_found_response("User not found.")
 
@@ -171,6 +181,29 @@ class UpdatePasswordView(APIView):
                 {"message": "Password updated successfully."}, status=status.HTTP_200_OK
             )
         return validation_error_response(serializer.errors)
+
+
+def generate_custom_token(user):
+    signer = TimestampSigner()
+    token = default_token_generator.make_token(user)
+    token_data = f"{user.id}:{token}"
+    signed_token = signer.sign(token_data)
+    return signed_token
+
+
+def validate_custom_token(signed_token):
+    signer = TimestampSigner()
+    try:
+        token_data = signer.unsign(
+            signed_token, max_age=3600
+        )  # Token expires in 1 hour
+        user_id, token = token_data.split(":")
+        user = User.objects.get(id=user_id)
+        if default_token_generator.check_token(user, token):
+            return user
+    except (BadSignature, ValueError, User.DoesNotExist):
+        pass
+    return None
 
 
 class PasswordResetRequestView(APIView):
@@ -186,51 +219,51 @@ class PasswordResetRequestView(APIView):
 
         try:
             user = User.objects.get(email=email)
-            token = default_token_generator.make_token(user)
-            uid = urlsafe_base64_encode(
-                str(user.id).encode()
-            )  # Use UUID bytes for encoding
-
-            reset_link = (
-                f"http://localhost:8000/api/auth/password-reset/confirm/{uid}/{token}/"
+            signed_token = generate_custom_token(user)
+            reset_link = f"http://localhost:8000/api/auth/password-reset-confirm/{signed_token}/"  # Use HTTPS in production
+            print(reset_link)
+            send_reset_password_email.delay(email, reset_link)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "No user found with this email address."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         except Exception as e:
             return Response(
                 {"error": "Failed to generate reset link."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        # call the send email task
-        send_reset_password_email.delay(email, reset_link)
+
         return Response(
             {"message": "Password reset email sent."}, status=status.HTTP_200_OK
         )
 
 
 class PasswordResetConfirmView(APIView):
+    authentication_classes=[]
     permission_classes = [AllowAny]
 
-    def post(self, request, uidb64, token):
-        try:
-            uid = urlsafe_base64_decode(uidb64).decode()
-            uid = UUID(uid)
-            # Fetch the user using the decoded UID
-            user = User.objects.get(id=uid)
-        except (ValueError, User.DoesNotExist, TypeError):
-            return not_found_response("Invalid user or token.")
+    def post(self, request, token):
+        user = validate_custom_token(token)
+        if not user:
+            return Response(
+                {"error": "Invalid or expired token."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Check the token
-        if default_token_generator.check_token(user, token):
-            serializer = PasswordResetConfirmSerializer(data=request.data)
-            if serializer.is_valid():
-                new_password = serializer.validated_data["password"]
-                user.set_password(new_password)
-                user.save()
-                return Response(
-                    {"message": "Password has been reset successfully."},
-                    status=status.HTTP_200_OK,
-                )
-            return validation_error_response(serializer.errors)
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        if serializer.is_valid():
+            new_password = serializer.validated_data["password"]
+            user.set_password(new_password)
+            user.save()
 
-        return Response(
-            {"error": "Invalid or expired token."}, status=status.HTTP_400_BAD_REQUEST
-        )
+            # Invalidate all active sessions
+            TokenHandler.invalidate_user_tokens(
+                user
+            )  # If using token-based authentication
+
+            return Response(
+                {"message": "Password has been reset successfully."},
+                status=status.HTTP_200_OK,
+            )
+        return validation_error_response(serializer.errors)

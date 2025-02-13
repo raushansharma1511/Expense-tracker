@@ -1,5 +1,5 @@
 from rest_framework.authentication import BaseAuthentication
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed,PermissionDenied
 import jwt
 from django.utils.timezone import now
 from .models import ActiveAccessToken  # Adjust the import based on your model location
@@ -11,8 +11,7 @@ class CustomJWTAuthentication(BaseAuthentication):
         # Get the token from the Authorization header
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            raise AuthenticationFailed("Authentication credentials were not provided.")
-            # No token, or invalid format (must start with "Bearer ")
+            raise PermissionDenied("Authentication credentials were not provided.")
 
         # Extract the token from the header
         raw_token = auth_header.split(" ")[1]
