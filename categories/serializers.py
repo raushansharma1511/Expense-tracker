@@ -20,7 +20,6 @@ class CategorySerializer(serializers.ModelSerializer):
             self.fields["user"].read_only = True
             self.fields["type"].read_only = True
 
-
     def validate_user(self, user):
         """Validate the user field."""
         request = self.context["request"]
@@ -44,16 +43,16 @@ class CategorySerializer(serializers.ModelSerializer):
     def _validate_category_name(self, value, user, type):
         """Ensure the category name is unique for the user or predefined categories."""
         normalized_value = slugify(value)
+        
+        if len(normalized_value) < 1:
+            raise serializers.ValidationError({"name": "This is not a valid name"})
 
         if (
             Category.objects.filter(
-                name__iexact=normalized_value, user=user, is_deleted=False, type=type
+                slug=normalized_value, user=user, is_deleted=False, type=type
             ).exists()
             or Category.objects.filter(
-                name__iexact=normalized_value,
-                is_predefined=True,
-                is_deleted=False,
-                type=type
+                slug=normalized_value, is_predefined=True, is_deleted=False, type=type
             ).exists()
         ):
             raise serializers.ValidationError({"name": "This category already exists."})
@@ -64,14 +63,15 @@ class CategorySerializer(serializers.ModelSerializer):
         Validate category data, ensuring the name and user fields are correct.
         """
         request = self.context["request"]
-        # category_name = data["name"]
 
         if self.instance is None:
             # when there is create request
             user = data.get("user")
 
             if "name" in data:
-                data["name"] = self._validate_category_name(data["name"], user,data["type"])
+                data["slug"] = self._validate_category_name(
+                    data["name"], user, data["type"]
+                )
 
             data["user"] = user
             data["is_predefined"] = user.is_staff
@@ -79,8 +79,8 @@ class CategorySerializer(serializers.ModelSerializer):
         else:
             # when there is update request
             if "name" in data:  # Only validate name if provided
-                data["name"] = self._validate_category_name(
-                    data["name"], self.instance.user,self.instance.type
+                data["slug"] = self._validate_category_name(
+                    data["name"], self.instance.user, self.instance.type
                 )
 
         return data

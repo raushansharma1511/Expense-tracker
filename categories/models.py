@@ -11,6 +11,7 @@ class Category(BaseModel):
         ("credit", "Credit"),
     )
     name = models.CharField(max_length=100)
+    slug = models.CharField(max_length=100)
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,

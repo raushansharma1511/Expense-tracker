@@ -1,5 +1,4 @@
 from rest_framework.views import APIView
-from rest_framework.exceptions import PermissionDenied
 from rest_framework import status
 from rest_framework.response import Response
 from django.db.models import Q
@@ -28,10 +27,12 @@ class CategoryListCreateView(APIView, CustomPagination):
         category_type = request.query_params.get("type", None)
 
         if request.user.is_staff:
-            categories = Category.objects.all()
+            categories = Category.objects.all().order_by("created_at")
         else:
-            categories = Category.objects.filter(is_deleted=False).filter(
-                Q(is_predefined=True) | Q(user=request.user)
+            categories = (
+                Category.objects.filter(is_deleted=False)
+                .filter(Q(is_predefined=True) | Q(user=request.user))
+                .order_by("created_at")
             )
 
         if category_type:
@@ -44,7 +45,7 @@ class CategoryListCreateView(APIView, CustomPagination):
     def post(self, request):
         """Add a new category."""
         serializer = CategorySerializer(data=request.data, context={"request": request})
-
+        
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
