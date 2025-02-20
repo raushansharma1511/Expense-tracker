@@ -8,12 +8,12 @@ urlpatterns = [
     path(
         "",
         InterwalletTransactionListCreateView.as_view(),
-        name="transaction-list-create",
+        name="interwallet-transaction-list-create",
     ),
     path(
         "<uuid:pk>/",
         InterwalletTransactionDetailView.as_view(),
-        name="transaction-retrieve-update-delete",
+        name="interwallet-transaction-retrieve-update-delete",
     ),
     # path("history/", views.InterwalletTransactionHistoryView.as_view(), name="transaction-history"),
 ]

@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.tokens import default_token_generator
 from django.core.signing import TimestampSigner, BadSignature
 from uuid import UUID
+from django.core.cache import cache
 
 from .serializers import (
     UserSerializer,
@@ -32,7 +33,8 @@ from .tasks import send_reset_password_email
 
 class RegisterView(APIView):
     """view for user Registration"""
-    authentication_classes=[]
+
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -45,7 +47,8 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     """view for user login"""
-    authentication_classes=[]
+
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -62,16 +65,12 @@ class LogoutView(APIView):
     """View for user logout"""
 
     def post(self, request):
-        serializer = LogoutSerializer(data=request.data, context={"request": request})
-
-        if serializer.is_valid():
             access_token = str(request.auth)
             TokenHandler.invalidate_access_token(access_token)
             return Response(
                 {"message": "Successfully logged out."},
                 status=status.HTTP_200_OK,
             )
-        return validation_error_response(serializer.errors)
 
 
 class UserListView(APIView, CustomPagination):
@@ -108,6 +107,7 @@ class UserDetailView(APIView):
             return not_found_response("User not found.")
 
         serializer = UserSerializer(target_user)
+        print("get method called")
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request, id):
@@ -207,28 +207,43 @@ def validate_custom_token(signed_token):
 
 
 class PasswordResetRequestView(APIView):
-    authentication_classes=[]
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         if not serializer.is_valid():
-            return validation_error_response(serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         email = serializer.validated_data["email"]
 
         try:
             user = User.objects.get(email=email)
+
+            # Check if a reset request already exists in Redis
+            cache_key = f"password_reset:{user.id}"
+            if cache.get(cache_key):
+                return Response(
+                    {"error": "A reset link has already been sent. Please wait until it expires or is used."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Generate new reset token
             signed_token = generate_custom_token(user)
             reset_link = f"http://localhost:8000/api/auth/password-reset-confirm/{signed_token}/"  # Use HTTPS in production
-            print(reset_link)
+
+            # Store the reset token in Redis (valid for 15 minutes)
+            cache.set(cache_key, signed_token, timeout=300)
+
+            # Send reset email asynchronously
             send_reset_password_email.delay(email, reset_link)
+
         except User.DoesNotExist:
             return Response(
                 {"error": "No user found with this email address."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except Exception as e:
+        except Exception:
             return Response(
                 {"error": "Failed to generate reset link."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -240,7 +255,7 @@ class PasswordResetRequestView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
-    authentication_classes=[]
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request, token):
@@ -257,13 +272,16 @@ class PasswordResetConfirmView(APIView):
             user.set_password(new_password)
             user.save()
 
-            # Invalidate all active sessions
-            TokenHandler.invalidate_user_tokens(
-                user
-            )  # If using token-based authentication
+            # Invalidate Redis cache entry (so user can request a new reset link if needed)
+            cache_key = f"password_reset:{user.id}"
+            cache.delete(cache_key)
+
+            # Invalidate all active sessions (if using token-based authentication)
+            TokenHandler.invalidate_user_tokens(user)
 
             return Response(
                 {"message": "Password has been reset successfully."},
                 status=status.HTTP_200_OK,
             )
-        return validation_error_response(serializer.errors)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

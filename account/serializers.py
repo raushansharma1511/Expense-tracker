@@ -93,38 +93,24 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
 class UserDeleteSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=False)
-    refresh_token = serializers.CharField(write_only=True, required=False)
 
     def validate(self, attrs):
         request_user = self.context["request"].user
         target_user = self.context["target_user"]
         password = attrs.get("password")
-        refresh_token = attrs.get("refresh_token")
 
         # Staff user validation
         if request_user.is_staff:
             return attrs
 
-        if not password or not refresh_token:
+        if not password:
             raise serializers.ValidationError(
-                {"detail": "Password and refresh token both are required."}
+                {"detail": "Password is required."}
             )
         # Validate password
         if not check_password(password, request_user.password):
             raise serializers.ValidationError({"password": "Invalid password."})
 
-        # Validate and blacklist refresh token
-        try:
-            token = RefreshToken(refresh_token)
-            if str(token["user_id"]) != str(request_user.id):
-                raise serializers.ValidationError(
-                    {"refresh_token": "Invalid refresh token."}
-                )
-            token.blacklist()
-        except Exception:
-            raise serializers.ValidationError(
-                {"refresh_token": "Invalid refresh token."}
-            )
         return attrs
 
     def delete_user(self, user):
