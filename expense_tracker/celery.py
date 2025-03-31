@@ -16,26 +16,7 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 
 # Optionally, you can add the result backend here:
 # For Redis:
-app.conf.result_backend = 'redis://localhost:6379/0'
+app.conf.result_backend = "redis://localhost:6379/0"
 
 # Load task modules from all registered Django app configs.
 app.autodiscover_tasks()
-
-# app.conf.beat_schedule = {
-#     "print_hello": {
-#         "task": "celeryapp.tasks.print_hello",
-#         "schedule": crontab(minute="*/30"),
-#     }
-# }
-
-# @app.task(bind=True)
-# def debug_task(self):
-#     print('Request: {0!r}'.format(self.request))
-# from celery.schedules import crontab
-
-# CELERY_BEAT_SCHEDULE = {
-#     'process-recurring-transactions': {
-#         'task': 'recurring_transactions.tasks.process_recurring_transactions',
-#         'schedule': crontab(minute='*/15'),  # Run every 15 minutes
-#     },
-# }
