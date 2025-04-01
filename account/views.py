@@ -29,6 +29,59 @@ from .tokens import TokenHandler
 from common.permissions import IsStaffUser
 from .permissions import IsStaffOrOwner
 from .tasks import send_reset_password_email
+from django.db import connection, OperationalError
+from django.http import JsonResponse
+
+
+class HealthCheckView(APIView):
+    """view for application health check"""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """Perform a simple health check"""
+        try:
+            # Try running a simple query to check the database connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT 1;"
+                )  # Simple query to ensure the database is responsive
+
+            # Check if the necessary tables exist (optional)
+            with connection.cursor() as cursor:
+                # For MySQL: SHOW TABLES
+                # For PostgreSQL, you can use: SELECT table_name FROM information_schema.tables WHERE table_schema='public';
+                cursor.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema='public';"
+                )
+                tables = cursor.fetchall()
+                if not tables:
+                    return Response(
+                        {
+                            "message": "No tables found in the database",
+                        },
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+
+            # If the query runs successfully and tables exist, return a healthy response
+            return Response(
+                {"message": "Database is healthy", "total_tables": len(tables)},
+                status=status.HTTP_200_OK,
+            )
+
+        except OperationalError as e:
+            # If there's an error with the database connection, return a 500 response
+            return Response(
+                {"message": "Database connection failed", "error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except Exception as e:
+            # Handle any other errors gracefully
+            return Response(
+                {"message": "An unexpected error occurred", "error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class RegisterView(APIView):
@@ -65,12 +118,12 @@ class LogoutView(APIView):
     """View for user logout"""
 
     def post(self, request):
-            access_token = str(request.auth)
-            TokenHandler.invalidate_access_token(access_token)
-            return Response(
-                {"message": "Successfully logged out."},
-                status=status.HTTP_200_OK,
-            )
+        access_token = str(request.auth)
+        TokenHandler.invalidate_access_token(access_token)
+        return Response(
+            {"message": "Successfully logged out."},
+            status=status.HTTP_200_OK,
+        )
 
 
 class UserListView(APIView, CustomPagination):
@@ -224,7 +277,9 @@ class PasswordResetRequestView(APIView):
             cache_key = f"password_reset:{user.id}"
             if cache.get(cache_key):
                 return Response(
-                    {"error": "A reset link has already been sent. Please wait until it expires or is used."},
+                    {
+                        "error": "A reset link has already been sent. Please wait until it expires or is used."
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

@@ -21,7 +21,7 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
-from reports.views import TransactionHistoryExportView
+from account.views import HealthCheckView
 
 
 schema_view = get_schema_view(
@@ -50,5 +50,5 @@ urlpatterns = [
     path("api/interwallet-transactions/", include("wallets.urls.interwallet_url")),
     path("api/recurring-transactions/", include("recurring_transactions.urls")),
     path("api/", include("reports.urls")),
+    path("api/health-check/", HealthCheckView.as_view(), name="health-check"),
 ]
-
