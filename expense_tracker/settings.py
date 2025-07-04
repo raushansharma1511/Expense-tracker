@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "wallets",
     "budgets",
     "recurring_transactions",
+    "behave_django",
 ]
 
 REST_FRAMEWORK = {
@@ -203,13 +204,28 @@ SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
 
 
-# testing database
-import sys
+# # testing database
+# import sys
 
-if "test" in sys.argv or "pytest" in sys.modules:
+# if "test" in sys.argv or "pytest" in sys.modules or "behave" in sys.argv[0]:
+#     DATABASES = {
+#         "default": {
+#             "ENGINE": "django.db.backends.sqlite3",
+#             "NAME": ":memory:",  # This makes it an in-memory database
+#         }
+#     }
+import sys
+import os
+
+TESTING = any(
+    keyword in " ".join(sys.argv) for keyword in ["test", "pytest", "behave"]
+)
+
+if TESTING:
+    print("✅ Using SQLite test database (in-memory)")
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": ":memory:",  # This makes it an in-memory database
+            "NAME": ":memory:",
         }
     }
