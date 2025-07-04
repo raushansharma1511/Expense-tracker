@@ -1,5 +1,5 @@
 from django.shortcuts import get_object_or_404
-from rest_framework import status
+from rest_framework import status, viewsets
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -9,6 +9,7 @@ from uuid import UUID
 from django.core.cache import cache
 
 from .serializers import (
+    RefreshTokenSerializer,
     UserSerializer,
     LogInSerializer,
     LogoutSerializer,
@@ -113,6 +114,17 @@ class LoginView(APIView):
             return Response(tokens, status=status.HTTP_200_OK)
         return validation_error_response(serializer.errors)
 
+class RefreshTokenView(viewsets.ViewSet):
+    serializer_class = RefreshTokenSerializer
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    
+    def create(self, request):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 
 class LogoutView(APIView):
     """View for user logout"""

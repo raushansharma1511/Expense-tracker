@@ -5,6 +5,7 @@ from .views import (
     UserDetailView,
     RegisterView,
     LoginView,
+    RefreshTokenView,
     LogoutView,
     UserListView,
     PasswordResetRequestView,
@@ -14,15 +15,22 @@ from .views import (
 urlpatterns = [
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/login/", LoginView.as_view(), name="login"),
+    path(
+        "auth/refresh/token",
+        RefreshTokenView.as_view({"post": "create"}),
+        name="refresh-token",
+    ),
     path("auth/logout/", LogoutView.as_view(), name="logout"),
     path(
         "auth/password-reset/",
         PasswordResetRequestView.as_view(),
         name="password-reset",
     ),
-    path("auth/password-reset-confirm/<str:token>/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
-    
-    
+    path(
+        "auth/password-reset-confirm/<str:token>/",
+        PasswordResetConfirmView.as_view(),
+        name="password-reset-confirm",
+    ),
     path("users/", UserListView.as_view(), name="get-users"),
     path("users/<uuid:id>/", UserDetailView.as_view(), name="get-update-delete-user"),
     path(

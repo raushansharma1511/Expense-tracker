@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import check_password
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 import re
 from .validators import validate_password
 
@@ -51,6 +52,24 @@ class LogInSerializer(serializers.Serializer):
             raise serializers.ValidationError({"detail": "Invalid credentials"})
         return user
 
+class RefreshTokenSerializer(serializers.Serializer):
+    refresh_token = serializers.CharField()
+    
+    def validate(self, data):
+        try:
+            refresh = RefreshToken(token=data["refresh_token"])
+            user_id = refresh.get("user_id")
+            user = User.objects.get(id=user_id)
+            access_token = refresh.access_token
+            ActiveAccessToken.objects.create(user=user, access_token=access_token)
+            return {
+            "access_token": str(access_token),
+            }
+        except User.DoesNotExist:
+            raise serializers.ValidationError("Token is no longer valid so please login again")
+        except TokenError as e:
+            raise serializers.ValidationError(str(e))
+    
 
 class LogoutSerializer(serializers.Serializer):
     refresh_token = serializers.CharField(required=True)
